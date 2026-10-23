@@ -53,6 +53,15 @@ public static class GameLauncher
 
     public static GameSession? Running { get; private set; }
 
+    /// <summary>启动过程中的详细信息（使用的 Java、内存、参数），供实时日志显示</summary>
+    public static event Action<string>? Trace;
+
+    private static void TraceInfo(string msg)
+    {
+        Log.Info(msg);
+        Trace?.Invoke(msg);
+    }
+
     public static async Task<GameSession> LaunchAsync(InstalledVersion version, Account account, IProgress<StageProgress> progress, CancellationToken ct)
     {
         var s = Settings.Current;
@@ -67,7 +76,7 @@ public static class GameLauncher
         // 2. 准备 Java（60% ~ 80%）
         progress.Report(new("准备 Java", 0.6));
         var java = await PrepareJavaAsync(json, progress, ct);
-        Log.Info($"使用 Java：{java.ToDetailedString()}");
+        TraceInfo($"使用 Java：{java.ToDetailedString()}");
 
         // 3. 账号
         progress.Report(new("验证账号", 0.82, account.Name));
@@ -85,7 +94,7 @@ public static class GameLauncher
         // 5. 参数
         progress.Report(new("生成启动参数", 0.94));
         var args = BuildArguments(gameDir, version, json, account, java, nativesDir, runDir, gameAssets);
-        Log.Info("启动参数：" + string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))
+        TraceInfo("启动参数：" + string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))
             .Replace(account.AccessToken, "********"));
 
         // 6. 启动
@@ -267,7 +276,7 @@ public static class GameLauncher
         var classpath = string.Join(";", cp.Distinct(StringComparer.OrdinalIgnoreCase));
 
         var memory = s.AutoMemory ? AutoMemoryMb(version) : Math.Max(512, s.MaxMemoryMb);
-        Log.Info($"分配内存 {memory} MB，系统剩余可提交内存 {MemoryCleaner.Status().AvailCommit / 1024 / 1024} MB");
+        TraceInfo($"分配内存 {memory} MB，系统剩余可提交内存 {MemoryCleaner.Status().AvailCommit / 1024 / 1024} MB");
         var isMs = account.Kind == AccountKind.Microsoft;
         var vars = new Dictionary<string, string>
         {

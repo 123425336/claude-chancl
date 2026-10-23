@@ -1,0 +1,65 @@
+<UserControl x:Class="ClaudeCL.Pages.GameLogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ClaudeCL.Controls"
+             Background="{DynamicResource BgBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 标题栏：可拖动窗口，右侧保留窗口按钮 -->
+        <DockPanel Margin="24,0,8,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource Btn.Caption}" c:Ui.Icon="&#xE921;" Click="Min_Click" ToolTip="最小化"/>
+                <Button Style="{StaticResource Btn.Caption}" c:Ui.Icon="&#xE922;" Click="Max_Click" ToolTip="最大化"/>
+                <Button Style="{StaticResource Btn.Close}" c:Ui.Icon="&#xE8BB;" Click="CloseWindow_Click" ToolTip="关闭启动器"/>
+            </StackPanel>
+            <TextBlock Text="实时日志" VerticalAlignment="Center" Style="{StaticResource T.Caption}" FontSize="12.5"/>
+        </DockPanel>
+
+        <!-- 版本名、状态与操作 -->
+        <DockPanel Grid.Row="1" Margin="32,4,32,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="CancelButton" Content="取消启动" Padding="14,7" Margin="0,0,8,0" Click="Cancel_Click"/>
+                <Button x:Name="KillButton" Content="结束游戏" Style="{StaticResource Btn.Danger}" c:Ui.Icon="&#xE711;" Padding="14,7" Margin="0,0,8,0"
+                        Visibility="Collapsed" Click="Kill_Click"/>
+                <Button Content="复制" c:Ui.Icon="&#xE8C8;" Padding="14,7" Margin="0,0,8,0" Click="Copy_Click"/>
+                <Button Content="游戏目录" c:Ui.Icon="&#xE8B7;" Padding="14,7" Margin="0,0,8,0" Click="Folder_Click"/>
+                <Button Content="收起" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE73F;" Padding="16,7" Click="Close_Click"
+                        ToolTip="收起日志（游戏会继续运行，可在主页再次打开）"/>
+            </StackPanel>
+            <c:SparkLoader x:Name="Spark" Width="34" Height="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="TitleText" Style="{StaticResource T.H1}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="StatusText" Style="{StaticResource T.Soft}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- 准备阶段的进度 -->
+        <StackPanel x:Name="ProgressPanel" Grid.Row="2" Margin="32,16,32,0">
+            <DockPanel>
+                <TextBlock x:Name="PercentText" DockPanel.Dock="Right" Style="{StaticResource T.Caption}"/>
+                <TextBlock x:Name="DetailText" Style="{StaticResource T.Caption}"/>
+            </DockPanel>
+            <ProgressBar x:Name="Bar" Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <!-- 日志正文 -->
+        <Border Grid.Row="3" Margin="32,16,32,28" CornerRadius="14" Background="{DynamicResource CodeBrush}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid>
+                <TextBox x:Name="LogBox" Style="{StaticResource TextBox.Code}" Background="Transparent" BorderThickness="0"
+                         Padding="16,12" FontSize="12.5" TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.ScrollChanged="LogBox_ScrollChanged"/>
+                <!-- 用户往上翻看时出现，点击回到最新 -->
+                <Button x:Name="FollowButton" Content="回到最新" c:Ui.Icon="&#xE74B;" Style="{StaticResource Btn.Primary}"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,18" Padding="14,7"
+                        Visibility="Collapsed" Click="Follow_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

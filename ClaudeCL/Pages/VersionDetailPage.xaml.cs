@@ -162,7 +162,7 @@ public partial class VersionDetailPage : UserControl, IPage
 
     private void Folder_Click(object sender, RoutedEventArgs e) => Shell.Open(RunDir);
 
-    private void Back_Click(object sender, RoutedEventArgs e) => MainWindow.Instance!.Navigate("versions");
+    private void Back_Click(object sender, RoutedEventArgs e) => MainWindow.Instance!.Navigate("home");
 
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {

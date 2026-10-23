@@ -129,6 +129,21 @@ public partial class MainWindow : Window
                 Save(System.IO.Path.Combine(dir, "light-detail-loader.png"));
             }
         }
+        if (AppState.SelectedVersion is { } logVersion)
+        {
+            // 模拟一次启动过程的实时日志
+            var log = new GameLogView(logVersion, new System.Threading.CancellationTokenSource());
+            ShowOverlay(log);
+            log.Info($"准备启动 {logVersion.Id}（{logVersion.Summary}），账号：Steve（离线账号）");
+            log.ReportStage(new StageProgress("下载游戏文件", 0.42, "1532 / 3648 · 182.4 MB"));
+            log.Info("使用 Java：JDK 17.0.12 Oracle 64 Bit | C:\\Program Files\\Java\\jdk-17\\bin");
+            for (var i = 0; i < 40; i++)
+                log.Append($"[12:00:{i:00}] [Render thread/INFO]: 示例游戏输出第 {i + 1} 行 Loading resources...");
+            await Task.Delay(1200);
+            Save(System.IO.Path.Combine(dir, "light-log.png"));
+            CloseOverlay(log);
+            await Task.Delay(400);
+        }
         Navigate("home");
         _ = Confirm("这是一个对话框", "用来确认截图里的对话框样式是否好看。", "好的", "取消");
         await Task.Delay(600);
@@ -203,7 +218,7 @@ public partial class MainWindow : Window
         foreach (var child in Nav.Children)
             if (child is RadioButton rb) rb.IsChecked = false;
         _current = "detail";
-        Present(new VersionDetailPage(version), $"版本管理 / {version.Id}");
+        Present(new VersionDetailPage(version), $"管理模组 / {version.Id}");
     }
 
     private void Present(FrameworkElement page, string title)
@@ -262,11 +277,48 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && _dialogs.Count > 0)
+        if (e.Key != Key.Escape) return;
+        if (_dialogs.Count > 0)
         {
             _dialogs[^1].OnEscape?.Invoke();
             e.Handled = true;
         }
+        else if (OverlayLayer.Children.Count > 0 && OverlayLayer.Children[0] is FrameworkElement top)
+        {
+            CloseOverlay(top);
+            e.Handled = true;
+        }
+    }
+
+    // ---------------- 全屏层 ----------------
+
+    /// <summary>
+    /// 盖住整个窗口显示一个页面（例如实时日志），从下方轻轻浮上来
+    /// </summary>
+    public void ShowOverlay(FrameworkElement view)
+    {
+        if (OverlayLayer.Children.Contains(view) && OverlayLayer.Visibility == Visibility.Visible) return;
+        OverlayLayer.Children.Clear();
+        OverlayLayer.Children.Add(view);
+        OverlayLayer.Visibility = Visibility.Visible;
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        OverlayLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+        OverlayShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+    }
+
+    public void CloseOverlay(FrameworkElement view)
+    {
+        if (!OverlayLayer.Children.Contains(view)) return;
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(180));
+        fade.Completed += (_, _) =>
+        {
+            // 动画期间可能又打开了别的页面
+            if (OverlayLayer.Opacity > 0.01) return;
+            OverlayLayer.Children.Clear();
+            OverlayLayer.Visibility = Visibility.Collapsed;
+        };
+        OverlayLayer.BeginAnimation(OpacityProperty, fade);
+        OverlayShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, TimeSpan.FromMilliseconds(180)));
     }
 
     // ---------------- 通知 ----------------

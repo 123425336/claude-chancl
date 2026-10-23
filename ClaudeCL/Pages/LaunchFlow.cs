@@ -57,31 +57,37 @@ public static class LaunchFlow
             return;
 
         _busy = true;
-        if (Settings.Current.CleanMemoryBeforeLaunch)
-        {
-            // 启动前先腾出内存
-            var clean = ProgressDialog.Show("先整理一下内存");
-            clean.Report(new StageProgress("正在清理内存", 0.5, "可能会弹出管理员授权"));
-            try
-            {
-                var (freed, _) = await MemoryCleaner.CleanAsync();
-                w.Toast($"启动前释放了 {Installer.FormatSize(freed)} 内存", ToastKind.Success);
-            }
-            catch (Exception ex) { Log.Warn("启动前清理内存失败：" + ex.Message); }
-            finally { clean.Close(); }
-        }
         using var cts = new CancellationTokenSource();
-        var dialog = ProgressDialog.Show($"正在启动 {version.Id}", cts);
+        // 点击启动后立即打开全屏日志，准备过程和游戏输出都显示在里面
+        var view = new GameLogView(version, cts);
+        _view = view;
+        w.ShowOverlay(view);
+        view.Info($"准备启动 {version.Id}（{version.Summary}），账号：{account.Name}（{account.KindText}）");
+        void OnTrace(string msg) => view.Info(msg);
+        GameLauncher.Trace += OnTrace;
         try
         {
-            var session = await GameLauncher.LaunchAsync(version, account, dialog.Progress, cts.Token);
-            dialog.Report(new StageProgress("等待游戏窗口出现", 1, "第一次启动会稍微慢一些"));
+            if (Settings.Current.CleanMemoryBeforeLaunch)
+            {
+                // 启动前先腾出内存
+                view.ReportStage(new StageProgress("正在清理内存", 0, "可能会弹出管理员授权"));
+                try
+                {
+                    var (freed, _) = await MemoryCleaner.CleanAsync();
+                    view.Info($"启动前释放了 {Installer.FormatSize(freed)} 内存");
+                }
+                catch (Exception ex) { view.Info("清理内存失败：" + ex.Message); }
+            }
+
+            var session = await GameLauncher.LaunchAsync(version, account, view.Progress, cts.Token);
             session.Exited += code => w.Dispatcher.BeginInvoke(() => OnExited(session, code));
+            view.Attach(session);
+            view.Info("游戏进程已启动，正在加载……");
             StateChanged?.Invoke();
             await WaitForWindowAsync(session, cts.Token);
-            dialog.Close();
             if (!session.Process.HasExited)
             {
+                view.Info("游戏窗口已出现");
                 w.Toast($"{version.Id} 启动成功，玩得开心！", ToastKind.Success);
                 switch (Settings.Current.AfterLaunch)
                 {
@@ -92,21 +98,22 @@ public static class LaunchFlow
         }
         catch (OperationCanceledException)
         {
-            dialog.Close();
+            view.MarkCanceled();
             w.Toast("已取消启动");
         }
         catch (Exception ex)
         {
-            dialog.Close();
             Log.Error(ex, "启动失败");
-            if (await w.Confirm("启动没有成功", ex.Message, "打开日志", "知道了"))
-                Shell.Open(AppPaths.LogDir);
+            view.MarkFailed(ex.Message);
         }
         finally
         {
+            GameLauncher.Trace -= OnTrace;
             _busy = false;
         }
     }
+
+    private static GameLogView? _view;
 
     /// <summary>
     /// 等到游戏窗口出现、进程退出或超时
@@ -196,39 +203,24 @@ public static class LaunchFlow
         return tcs.Task;
     }
 
+
     /// <summary>
-    /// 实时查看正在运行的游戏日志
+    /// 打开全屏实时日志（主页“查看日志”按钮）
     /// </summary>
     public static void ShowLiveLog()
     {
-        var session = GameLauncher.Running;
         var w = MainWindow.Instance!;
+        var session = GameLauncher.Running;
+        // 正在启动或运行中的那份日志直接打开
+        if (_view is not null && (_busy || _view.Session == session && session is not null))
+        {
+            w.ShowOverlay(_view);
+            return;
+        }
         if (session is null) { w.Toast("现在没有正在运行的游戏"); return; }
-
-        var body = new StackPanel { Width = 680 };
-        body.Children.Add(new TextBlock { Text = $"{session.Version.Id} 的实时日志", Style = (Style)w.FindResource("T.H2"), FontSize = 19 });
-        var box = new TextBox
-        {
-            Style = (Style)w.FindResource("TextBox.Code"), Height = 360, Margin = new Thickness(0, 14, 0, 0),
-            Text = string.Join(Environment.NewLine, session.Lines),
-        };
-        body.Children.Add(box);
-        var close = new Button { Content = "关闭", Style = (Style)w.FindResource("Btn.Primary"), MinWidth = 84, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        body.Children.Add(close);
-        var handle = w.ShowDialog(body, 760);
-
-        // 定时刷新而不是每行刷新，避免日志刷屏时界面卡顿
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        timer.Tick += (_, _) =>
-        {
-            var atBottom = box.VerticalOffset + box.ViewportHeight >= box.ExtentHeight - 4;
-            box.Text = string.Join(Environment.NewLine, session.Lines);
-            if (atBottom) box.ScrollToEnd();
-        };
-        timer.Start();
-        box.Loaded += (_, _) => box.ScrollToEnd();
-        void Done() { timer.Stop(); handle.Close(); }
-        close.Click += (_, _) => Done();
-        handle.OnEscape = Done;
+        var view = new GameLogView(session.Version, null);
+        view.Attach(session);
+        _view = view;
+        w.ShowOverlay(view);
     }
 }

@@ -11,7 +11,7 @@
 
         <!-- 顶部：返回 + 版本名 + 操作 -->
         <DockPanel Margin="0,0,0,14">
-            <Button DockPanel.Dock="Left" Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE72B;" ToolTip="返回版本管理" Click="Back_Click"
+            <Button DockPanel.Dock="Left" Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE72B;" ToolTip="返回主页" Click="Back_Click"
                     VerticalAlignment="Center" Margin="0,0,10,0"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Content="打开文件夹" c:Ui.Icon="&#xE8B7;" Padding="14,7" Margin="0,0,8,0" Click="Folder_Click"/>
