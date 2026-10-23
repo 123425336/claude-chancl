@@ -45,7 +45,7 @@ public partial class GameLogView : UserControl
     /// <summary>追加一行（任意线程可调用）</summary>
     public void Append(string line)
     {
-        _pending.Enqueue(line);
+        _pending.Enqueue(Redactor.Clean(line));
         // 日志页收起时也在积累，限制一下数量
         while (_pending.Count > MaxLines) _pending.TryDequeue(out _);
     }

@@ -35,15 +35,33 @@ public sealed class Account
     [JsonIgnore]
     public string AccessToken
     {
-        get => Unprotect(AccessTokenProtected) ?? Uuid;
-        set => AccessTokenProtected = Protect(value);
+        get
+        {
+            var token = Unprotect(AccessTokenProtected) ?? Uuid;
+            Redactor.Register(token);
+            return token;
+        }
+        set
+        {
+            Redactor.Register(value);
+            AccessTokenProtected = Protect(value);
+        }
     }
 
     [JsonIgnore]
     public string? RefreshToken
     {
-        get => Unprotect(RefreshTokenProtected);
-        set => RefreshTokenProtected = value is null ? null : Protect(value);
+        get
+        {
+            var token = Unprotect(RefreshTokenProtected);
+            Redactor.Register(token);
+            return token;
+        }
+        set
+        {
+            Redactor.Register(value);
+            RefreshTokenProtected = value is null ? null : Protect(value);
+        }
     }
 
     private static string Protect(string text) =>

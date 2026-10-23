@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -43,6 +44,23 @@ public partial class App : Application
             Settings.Current.GameDir = a[gi + 1];
             var si = Array.IndexOf(a, "--select");
             if (si >= 0 && si + 1 < a.Length) Settings.Current.SelectedVersion = a[si + 1];
+        }
+        if (a.Length >= 2 && a[0] == "--redact-test")
+        {
+            // 调试：检查各种可能泄漏令牌的文本是否都被遮盖
+            Redactor.Register("myRawMinecraftAccessToken1234567890");
+            string[] samples =
+            [
+                "(Session ID is token:myRawMinecraftAccessToken1234567890:0123456789abcdef0123456789abcdef)",
+                "--username Steve --accessToken eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U --userType msa",
+                "--accessToken someOpaqueTokenValue123 --version 1.7.10",
+                "GET https://example.com/cb?code=M.C123_BAY.2.U.abcdef&state=xyz",
+                "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345",
+                "普通日志：Setting user: Steve，加载了 128 个模组",
+            ];
+            System.IO.File.WriteAllLines(a[1], samples.Select(s => "原文：" + s + "\n遮盖：" + Redactor.Clean(s) + "\n"), new System.Text.UTF8Encoding(false));
+            Shutdown(0);
+            return;
         }
         if (a.Length >= 4 && a[0] == "--selftest")
         {

@@ -32,7 +32,8 @@ public static class Log
 
     private static void Write(string level, string msg)
     {
-        var line = $"[{DateTime.Now:HH:mm:ss.fff}] [{level}] [{Thread.CurrentThread.ManagedThreadId}] {msg}";
+        // 写入日志文件前遮盖令牌等敏感信息
+        var line = $"[{DateTime.Now:HH:mm:ss.fff}] [{level}] [{Thread.CurrentThread.ManagedThreadId}] {Redactor.Clean(msg)}";
         Recent.Enqueue(line);
         while (Recent.Count > 500) Recent.TryDequeue(out _);
         lock (FileLock)

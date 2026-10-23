@@ -32,6 +32,8 @@ public sealed class GameSession
 
     internal void Push(string line)
     {
+        // 游戏输出里可能带有令牌（例如旧版本会打印会话信息），先遮盖再保存和显示
+        line = Redactor.Clean(line);
         Lines.Enqueue(line);
         while (Lines.Count > 600) Lines.TryDequeue(out _);
         Output?.Invoke(line);
@@ -81,6 +83,7 @@ public static class GameLauncher
         // 3. 账号
         progress.Report(new("验证账号", 0.82, account.Name));
         await AccountService.EnsureValidAsync(account, ct);
+        Redactor.Register(account.AccessToken);
 
         // 4. natives 与旧版资源
         progress.Report(new("解压本地库", 0.86));
