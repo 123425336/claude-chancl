@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- 程序基本信息 -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <AssemblyName>ClaudeCL</AssemblyName>
+        <RootNamespace>ClaudeCL</RootNamespace>
+        <Product>ClaudeCL</Product>
+        <AssemblyTitle>ClaudeCL 启动器</AssemblyTitle>
+        <Description>温柔可爱的 Minecraft 启动器</Description>
+        <Version>1.0.0</Version>
+        <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <Platforms>x64;ARM64</Platforms>
+        <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
+        <PlatformTarget>$(Platform)</PlatformTarget>
+        <Configurations>Debug;Release</Configurations>
+        <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+        <NoWarn>$(NoWarn);NU1510;CA1416</NoWarn>
+    </PropertyGroup>
+
+    <!-- 图片资源（看板娘立绘、图标等）以 WPF 资源方式打包 -->
+    <ItemGroup>
+        <Resource Include="Assets\*.png" />
+        <Resource Include="Assets\*.jpg" />
+        <Resource Include="Assets\app.ico" />
+    </ItemGroup>
+
+    <!-- 许可证文本随程序一同输出 -->
+    <ItemGroup>
+        <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <!-- 复用的 Apache-2.0 核心库 -->
+    <ItemGroup>
+        <ProjectReference Include="..\PCL.Core\PCL.Core.csproj" SetConfiguration="Configuration=Debug" Condition="'$(Configuration)' == 'Debug'" />
+        <ProjectReference Include="..\PCL.Core\PCL.Core.csproj" SetConfiguration="Configuration=Release" Condition="'$(Configuration)' == 'Release'" />
+    </ItemGroup>
+</Project>

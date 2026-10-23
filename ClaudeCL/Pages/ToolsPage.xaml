@@ -1,0 +1,131 @@
+<UserControl x:Class="ClaudeCL.Pages.ToolsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ClaudeCL.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="36,6,40,28">
+            <TextBlock Text="小工具" Style="{StaticResource T.H1}"/>
+            <TextBlock Text="一些冒险途中用得上的小玩意儿。" Style="{StaticResource T.Soft}" Margin="0,4,0,18"/>
+
+            <!-- 内存清理 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="96" Height="96">
+                            <c:RingGauge x:Name="MemRing" Thickness="10"/>
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock x:Name="MemPercent" Text="0%" FontFamily="{StaticResource SerifFont}" FontSize="22" HorizontalAlignment="Center"/>
+                                <TextBlock Text="已使用" Style="{StaticResource T.Caption}" FontSize="11" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Grid.Column="1" Margin="22,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="内存清理" Style="{StaticResource T.H2}"/>
+                            <TextBlock x:Name="MemDetail" Style="{StaticResource T.Soft}" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="CommitDetail" Style="{StaticResource T.Caption}" Margin="0,2,0,0"/>
+                            <TextBlock Style="{StaticResource T.Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Text="会请求管理员权限，让各个程序交出暂时用不到的内存，并清空系统缓存。不会结束任何程序，也不会丢失数据。"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <Button x:Name="CleanButton" Content="一键清理" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xEA18;"
+                                    Padding="20,10" FontSize="14.5" Click="Clean_Click"/>
+                            <Button x:Name="HungButton" Content="查看未响应程序" Style="{StaticResource Btn.Ghost}" Padding="10,6" Margin="0,6,0,0"
+                                    Click="Hung_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel x:Name="HungPanel" Margin="0,14,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 服务器状态 -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="服务器状态" Style="{StaticResource T.H2}"/>
+                    <TextBlock Text="看看服务器开着没有、有多少人在线。" Style="{StaticResource T.Caption}" Margin="0,3,0,14"/>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" x:Name="PingButton" Content="查询" Style="{StaticResource Btn.Primary}" Padding="20,8" Margin="10,0,0,0" Click="Ping_Click"/>
+                        <TextBox x:Name="AddressBox" c:Ui.Placeholder="服务器地址，例如 play.example.com:25565" KeyDown="AddressBox_KeyDown"/>
+                    </DockPanel>
+
+                    <StackPanel x:Name="PingLoading" Orientation="Horizontal" Margin="2,16,0,0" Visibility="Collapsed">
+                        <c:SparkLoader Width="22" Height="22"/>
+                        <TextBlock Text="正在敲门……" Style="{StaticResource T.Soft}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Border x:Name="PingResult" Margin="0,16,0,0" Padding="14" CornerRadius="12" Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Visibility="Collapsed">
+                        <DockPanel>
+                            <Border Width="56" Height="56" CornerRadius="10" ClipToBounds="True" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Top">
+                                <Image x:Name="Favicon" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            </Border>
+                            <StackPanel Margin="14,0,0,0">
+                                <TextBlock x:Name="Motd" Style="{StaticResource T.Body}" FontFamily="{StaticResource MonoFont}"/>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Border Style="{StaticResource Pill}"><TextBlock x:Name="Players" FontSize="12" Foreground="{DynamicResource AccentBrush}"/></Border>
+                                    <Border Style="{StaticResource Pill}"><TextBlock x:Name="Latency" FontSize="12" Foreground="{DynamicResource AccentBrush}"/></Border>
+                                    <Border Style="{StaticResource Pill}"><TextBlock x:Name="ServerVersion" FontSize="12" Foreground="{DynamicResource AccentBrush}"/></Border>
+                                </WrapPanel>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <TextBlock x:Name="PingError" Style="{StaticResource T.Soft}" Foreground="{DynamicResource DangerBrush}" Margin="2,14,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Java 列表 -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="重新扫描" c:Ui.Icon="&#xE72C;" Padding="12,6" Click="ScanJava_Click"/>
+                        <StackPanel>
+                            <TextBlock Text="本机的 Java" Style="{StaticResource T.H2}"/>
+                            <TextBlock Text="启动时会自动挑选合适的版本；找不到就自动下载。" Style="{StaticResource T.Caption}" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <StackPanel x:Name="JavaLoading" Orientation="Horizontal" Margin="2,14,0,0" Visibility="Collapsed">
+                        <c:SparkLoader Width="22" Height="22"/>
+                        <TextBlock Text="正在各个角落里找 Java……" Style="{StaticResource T.Soft}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <ItemsControl x:Name="JavaList" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="12,9" Margin="0,0,0,6" CornerRadius="10" Background="{DynamicResource SurfaceBrush}">
+                                    <DockPanel>
+                                        <Border DockPanel.Dock="Left" Style="{StaticResource Pill}" Margin="0,0,12,0" VerticalAlignment="Center" Width="72">
+                                            <Border.Resources>
+                                                <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Center"/></Style>
+                                            </Border.Resources>
+                                            <TextBlock Text="{Binding MajorVersion, StringFormat=Java {0}}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                        </Border>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Brand}" FontSize="13"/>
+                                            <TextBlock Text="{Binding JavaFolder}" Style="{StaticResource T.Caption}"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="JavaEmpty" Text="暂时没有找到 Java，不用担心，启动游戏时会自动下载。" Style="{StaticResource T.Soft}" Margin="0,8,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 常用文件夹 -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="常用文件夹" Style="{StaticResource T.H2}"/>
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button Content="游戏目录" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="OpenGame_Click"/>
+                        <Button Content="当前版本的存档" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="OpenSaves_Click"/>
+                        <Button Content="截图" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="OpenShots_Click"/>
+                        <Button Content="启动器日志" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="OpenLogs_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
