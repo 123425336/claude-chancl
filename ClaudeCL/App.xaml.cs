@@ -46,6 +46,9 @@ public partial class App : Application
         // 调试：假装成旧版本，用来测试自动更新
         var pretend = Array.IndexOf(e.Args, "--pretend-version");
         if (pretend >= 0 && pretend + 1 < e.Args.Length) SelfUpdater.Current = Version.Parse(e.Args[pretend + 1]);
+        // 调试：让前几次检查更新失败
+        var failIdx = Array.IndexOf(e.Args, "--fail-update-checks");
+        if (failIdx >= 0 && failIdx + 1 < e.Args.Length) SelfUpdater.DebugFailures = int.Parse(e.Args[failIdx + 1]);
         // 调试自检：不显示窗口，安装并启动后退出
         var a = e.Args;
         // 调试截图时指定临时游戏目录，且不改动用户的设置文件
@@ -122,6 +125,28 @@ public partial class App : Application
             foreach (var (name, reason) in VersionStore.LastSkipped) report.Add($"  {name} → {reason}");
             System.IO.File.WriteAllLines(a[2], report, new System.Text.UTF8Encoding(false));
             Shutdown(0);
+            return;
+        }
+        if (a.Length >= 2 && a[0] == "--check-update-test")
+        {
+            // 调试：只检查更新，记录耗时与异常详情
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var report = new System.Collections.Generic.List<string>();
+                for (var i = 0; i < 3; i++)
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        var r = await SelfUpdater.CheckAsync(default);
+                        report.Add($"第 {i + 1} 次：{sw.ElapsedMilliseconds} ms，结果 {(r is null ? "没有新版本" : r.Tag)}");
+                    }
+                    catch (Exception ex) { report.Add($"第 {i + 1} 次：{sw.ElapsedMilliseconds} ms 后失败：{ex}"); }
+                }
+                System.IO.File.WriteAllLines(a[1], report, new System.Text.UTF8Encoding(false));
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
             return;
         }
         if (a.Length >= 2 && a[0] == "--self-update-test")

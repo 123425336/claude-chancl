@@ -45,8 +45,20 @@ public static class SelfUpdater
     /// <summary>
     /// 查询最新发布；没有比当前更新的版本时返回 null
     /// </summary>
+#if DEBUG
+    /// <summary>调试：让前几次检查直接失败，用来测试自动重试</summary>
+    public static int DebugFailures { get; set; }
+#endif
+
     public static async Task<ReleaseInfo?> CheckAsync(CancellationToken ct)
     {
+#if DEBUG
+        if (DebugFailures > 0)
+        {
+            DebugFailures--;
+            throw new OperationCanceledException("调试模拟：检查更新被拦截");
+        }
+#endif
         using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
         req.Headers.Accept.ParseAdd("application/vnd.github+json");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);

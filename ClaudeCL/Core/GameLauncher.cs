@@ -95,7 +95,7 @@ public sealed class GameSession
 public static class GameLauncher
 {
     public const string LauncherName = "ClaudeCL";
-    public const string LauncherVersion = "1.0.3";
+    public const string LauncherVersion = "1.0.4";
 
     public static GameSession? Running { get; private set; }
 

@@ -202,21 +202,33 @@ public partial class MainWindow : Window
     /// </summary>
     public async Task CheckUpdateAsync(bool manual)
     {
-        try
+        // 启动时的自动检查失败后稍后重试（例如防火墙第一次拦下联网、等用户点允许）；手动检查立即反馈结果
+        int[] retryDelays = manual ? [] : [30, 120];
+        for (var attempt = 0; ; attempt++)
         {
-            var release = await SelfUpdater.CheckAsync(default);
-            if (release is null)
+            try
             {
-                if (manual) Toast($"已经是最新版本啦（v{SelfUpdater.Current}）", ToastKind.Success);
+                var release = await SelfUpdater.CheckAsync(default);
+                if (release is null)
+                {
+                    if (manual) Toast($"已经是最新版本啦（v{SelfUpdater.Current}）", ToastKind.Success);
+                    return;
+                }
+                Log.Info($"发现新版本 {release.Tag}");
+                ShowUpdateDialog(release);
                 return;
             }
-            Log.Info($"发现新版本 {release.Tag}");
-            ShowUpdateDialog(release);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("检查更新失败：" + ex.Message);
-            if (manual) Toast("检查更新失败：" + ex.GetBaseException().Message, ToastKind.Error);
+            catch (Exception ex)
+            {
+                var willRetry = attempt < retryDelays.Length;
+                Log.Warn($"检查更新失败（第 {attempt + 1} 次）：{ex.Message}" + (willRetry ? $"，{retryDelays[attempt]} 秒后重试" : ""));
+                if (!willRetry)
+                {
+                    if (manual) Toast("检查更新失败：" + ex.GetBaseException().Message, ToastKind.Error);
+                    return;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(retryDelays[attempt]));
+            }
         }
     }
 
