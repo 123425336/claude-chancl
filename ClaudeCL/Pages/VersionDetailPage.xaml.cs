@@ -244,9 +244,8 @@ public partial class VersionDetailPage : UserControl, IPage
             MainWindow.Instance!.Toast("切换失败（游戏运行时文件会被占用）：" + ex.Message, ToastKind.Error);
         }
         box.IsChecked = mod.Enabled;
-        // 筛选状态下切换后需要重新筛选
-        if (OnChip.IsChecked == true || OffChip.IsChecked == true) ApplyFilter();
-        else SubText.Text = $"{_version.Summary} · {_mods.Count} 个模组，启用 {_mods.Count(m => m.Enabled)} 个";
+        // 筛选状态下也不立刻移出列表：停用的模组只是变灰，方便马上再打开；重新进入页面或换筛选条件时才按新状态筛选
+        SubText.Text = $"{_version.Summary} · {_mods.Count} 个模组，启用 {_mods.Count(m => m.Enabled)} 个";
     }
 
     private async void Delete_Click(object sender, RoutedEventArgs e)

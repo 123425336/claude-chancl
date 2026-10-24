@@ -12,7 +12,7 @@
         <Product>ClaudeCL</Product>
         <AssemblyTitle>ClaudeCL 启动器</AssemblyTitle>
         <Description>温柔可爱的 Minecraft 启动器</Description>
-        <Version>1.0.6</Version>
+        <Version>1.0.7</Version>
         <ApplicationIcon>Assets\app.ico</ApplicationIcon>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <Platforms>x64;ARM64</Platforms>
