@@ -22,8 +22,17 @@ public sealed record ResourceProject(
 }
 
 /// <summary>某个资源的一个可下载版本</summary>
-public sealed record ResourceFile(string VersionName, string FileName, string Url, string? Sha1, long Size, string[] GameVersions, string[] Loaders, DateTime Published, string[] RequiredProjects)
+public sealed record ResourceFile(string VersionName, string FileName, string Url, string? Sha1, long Size, string[] GameVersions, string[] Loaders, DateTime Published, string[] RequiredProjects, string VersionType = "release")
 {
+    public string TypeText => VersionType switch
+    {
+        "beta" => "测试版",
+        "alpha" => "开发版",
+        _ => "正式版",
+    };
+    public string DateText => $"{Published:yyyy-MM-dd}";
+    public string SizeText => Installer.FormatSize(Size);
+
     public string Summary => $"{string.Join(" / ", Loaders)} · {string.Join(", ", GameVersions.Take(3))}{(GameVersions.Length > 3 ? " …" : "")}";
 }
 
@@ -89,7 +98,47 @@ public static class ModrinthClient
             // 必需的前置资源
             v["dependencies"]?.AsArray()
                 .Where(d => (string?)d?["dependency_type"] == "required" && (string?)d?["project_id"] is { Length: > 0 })
-                .Select(d => (string)d!["project_id"]!).ToArray() ?? []);
+                .Select(d => (string)d!["project_id"]!).ToArray() ?? [],
+            (string?)v["version_type"] ?? "release");
+    }
+
+    /// <summary>
+    /// 按文件 SHA1 批量查询：每个文件属于哪个资源、它的这个版本需要哪些前置资源
+    /// </summary>
+    public static async Task<Dictionary<string, (string ProjectId, string[] RequiredProjects)>> LookupAsync(
+        IReadOnlyCollection<string> sha1s, CancellationToken ct)
+    {
+        var result = new Dictionary<string, (string, string[])>(StringComparer.OrdinalIgnoreCase);
+        if (sha1s.Count == 0) return result;
+        var json = await PostJsonAsync($"{Api}/version_files", new JsonObject
+        {
+            ["hashes"] = new JsonArray(sha1s.Select(h => (JsonNode)JsonValue.Create(h)!).ToArray()),
+            ["algorithm"] = "sha1",
+        }, ct).ConfigureAwait(false);
+        foreach (var (hash, v) in json.AsObject())
+        {
+            if ((string?)v?["project_id"] is not { } pid) continue;
+            var deps = v["dependencies"]?.AsArray()
+                .Where(d => (string?)d?["dependency_type"] == "required" && (string?)d?["project_id"] is { Length: > 0 })
+                .Select(d => (string)d!["project_id"]!).ToArray() ?? [];
+            result[hash] = (pid, deps);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 按资源 ID 或短名称查询资源；不存在时返回 null
+    /// </summary>
+    public static async Task<ResourceProject?> FindProjectAsync(string idOrSlug, CancellationToken ct)
+    {
+        try
+        {
+            return await GetProjectAsync(Uri.EscapeDataString(idOrSlug), ct).ConfigureAwait(false);
+        }
+        catch (System.Net.Http.HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
     }
 
     private static async Task<JsonNode> PostJsonAsync(string url, JsonObject body, CancellationToken ct)

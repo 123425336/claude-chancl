@@ -160,6 +160,49 @@ public partial class App : Application
             });
             return;
         }
+        if (a.Length >= 4 && a[0] == "--deps-test")
+        {
+            // 调试：检查前置 → 一键处理 → 再检查一次
+            Settings.ReadOnly = true;
+            Settings.Current.GameDir = a[1];
+            Settings.Current.IsolateVersions = true;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var report = new System.Collections.Generic.List<string>();
+                void Dump(string title, DependencyReport r)
+                {
+                    report.Add($"{title}：需要启用 {r.ToEnable.Count}，需要下载 {r.ToDownload.Count}，找不到 {r.Unresolved.Count}{(r.OnlineError is null ? "" : "，联网失败：" + r.OnlineError)}");
+                    foreach (var (m, by) in r.ToEnable) report.Add($"  启用 {m.Name}（{m.FileName}）← {by}");
+                    foreach (var d in r.ToDownload) report.Add($"  下载 {d.Title} {d.File.VersionName} ← {d.RequiredBy}");
+                    foreach (var u in r.Unresolved) report.Add($"  找不到 {u.Id} ← {u.RequiredBy}");
+                }
+                try
+                {
+                    var v = VersionStore.Load(a[1], a[2]);
+                    var first = await DependencyChecker.CheckAsync(v, default);
+                    Dump("第一次检查", first);
+                    if (first.CanFix)
+                    {
+                        await DependencyChecker.FixAsync(first, v, new SyncProgress(_ => { }), default);
+                        report.Add("已一键处理");
+                        Dump("再次检查", await DependencyChecker.CheckAsync(v, default));
+                    }
+                    report.Add("mods 文件夹：");
+                    report.AddRange(System.IO.Directory.GetFiles(System.IO.Path.Combine(v.Dir, "mods")).Select(f => "  " + System.IO.Path.GetFileName(f)));
+                    // 递归查找：只给出一个资源，看能不能找出它前置的前置
+                    if (await ModrinthClient.FindProjectAsync("architectury-api", default) is { } arch)
+                    {
+                        var plans = await DependencyChecker.ResolveProjectsAsync([arch.Id], "测试", v, [], default);
+                        report.Add($"递归查找 {arch.Title} 的前置链：" + string.Join(" → ", plans.Select(p => $"{p.Title}（{p.RequiredBy} 需要）")));
+                    }
+                }
+                catch (Exception ex) { report.Add("失败：" + ex); }
+                System.IO.File.WriteAllLines(a[3], report, new System.Text.UTF8Encoding(false));
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--update-test")
         {
             // 调试：检查指定版本的模组更新并全部执行，输出前后对比

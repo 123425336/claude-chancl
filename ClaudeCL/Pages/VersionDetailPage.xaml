@@ -45,6 +45,8 @@
                     <TextBlock x:Name="UpdateStatus" Style="{StaticResource T.Caption}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <Button x:Name="UpdateAllButton" Content="全部更新" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE896;" Padding="12,7"
                             Margin="0,0,6,0" Visibility="Collapsed" Click="UpdateAll_Click"/>
+                    <Button Content="检查前置" c:Ui.Icon="&#xE73E;" Padding="12,7" Margin="0,0,6,0" Click="CheckDeps_Click"
+                            ToolTip="检查所有模组的前置是否都已启用（包括前置的前置）"/>
                     <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE72C;" ToolTip="刷新" Click="Refresh_Click"/>
                     <Button Content="添加模组" c:Ui.Icon="&#xE710;" Padding="12,7" Margin="6,0,0,0" Click="AddMods_Click"/>
                 </StackPanel>

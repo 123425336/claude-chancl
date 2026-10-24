@@ -38,6 +38,7 @@ public partial class SettingsPage : UserControl, IPage
         IsolateCheck.IsChecked = s.IsolateVersions;
         CleanMemCheck.IsChecked = s.CleanMemoryBeforeLaunch;
         FoldLogCheck.IsChecked = s.FoldRepeatedLogs;
+        DepCheck.IsChecked = s.CheckDependencies;
         AfterBox.SelectedIndex = Math.Clamp(s.AfterLaunch, 0, 2);
         JvmBox.Text = s.ExtraJvmArgs;
         GameArgsBox.Text = s.ExtraGameArgs;
@@ -146,6 +147,7 @@ public partial class SettingsPage : UserControl, IPage
         s.IsolateVersions = IsolateCheck.IsChecked == true;
         s.CleanMemoryBeforeLaunch = CleanMemCheck.IsChecked == true;
         s.FoldRepeatedLogs = FoldLogCheck.IsChecked == true;
+        s.CheckDependencies = DepCheck.IsChecked == true;
         s.AfterLaunch = Math.Max(0, AfterBox.SelectedIndex);
         s.ExtraJvmArgs = JvmBox.Text.Trim();
         s.ExtraGameArgs = GameArgsBox.Text.Trim();

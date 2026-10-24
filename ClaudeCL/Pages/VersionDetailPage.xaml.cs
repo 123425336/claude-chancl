@@ -260,6 +260,18 @@ public partial class VersionDetailPage : UserControl, IPage
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _ = LoadModsAsync();
 
+    private async void CheckDeps_Click(object sender, RoutedEventArgs e)
+    {
+        if (_version.ModLoaderName is null)
+        {
+            MainWindow.Instance!.Toast("这个版本没有模组加载器，不需要检查前置");
+            return;
+        }
+        await LaunchFlow.CheckDependenciesAsync(_version, false);
+        // 可能启用或下载了模组，重新读取
+        await LoadModsAsync();
+    }
+
     private void AddMods_Click(object sender, RoutedEventArgs e)
     {
         var w = MainWindow.Instance!;

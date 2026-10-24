@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -54,6 +55,10 @@ public static class LaunchFlow
 
         if (GameLauncher.Running is not null &&
             !await w.Confirm("已经有游戏在运行啦", "确定还要再启动一个吗？同时运行两个游戏会占用很多内存。", "再开一个", "算了"))
+            return;
+
+        // 启动前检查模组前置
+        if (Settings.Current.CheckDependencies && version.ModLoaderName is not null && !await CheckDependenciesAsync(version, true))
             return;
 
         _busy = true;
@@ -114,6 +119,133 @@ public static class LaunchFlow
     }
 
     private static GameLogView? _view;
+
+    // ---------------- 前置检查 ----------------
+
+    /// <summary>
+    /// 检查前置并让用户选择处理方式；返回是否继续（launching 为 true 时表示是否继续启动）
+    /// </summary>
+    public static async Task<bool> CheckDependenciesAsync(InstalledVersion version, bool launching)
+    {
+        var w = MainWindow.Instance!;
+        DependencyReport report;
+        using (var cts = new CancellationTokenSource())
+        {
+            var checking = ProgressDialog.Show("正在检查前置模组", cts);
+            checking.Report(new StageProgress("检查模组前置", 0.3, "缺少的前置会联网查找"));
+            try
+            {
+                report = await DependencyChecker.CheckAsync(version, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                checking.Close();
+                return false;
+            }
+            catch (Exception ex)
+            {
+                checking.Close();
+                Log.Warn("检查前置失败：" + ex.Message);
+                w.Toast("检查前置失败：" + ex.Message, ToastKind.Error);
+                // 检查本身出错时不拦着启动
+                return launching;
+            }
+            checking.Close();
+        }
+
+        if (!report.HasIssues)
+        {
+            if (!launching) w.Toast("所有前置都准备好了，没有问题～", ToastKind.Success);
+            return true;
+        }
+
+        var choice = await ShowDependencyDialogAsync(report, launching);
+        if (choice == DependencyChoice.Cancel) return false;
+        if (choice == DependencyChoice.Ignore) return true;
+
+        using var fixCts = new CancellationTokenSource();
+        var fixing = ProgressDialog.Show("正在准备前置", fixCts);
+        try
+        {
+            await DependencyChecker.FixAsync(report, version, fixing.Progress, fixCts.Token);
+            fixing.Close();
+            var parts = new List<string>();
+            if (report.ToEnable.Count > 0) parts.Add($"启用了 {report.ToEnable.Count} 个");
+            if (report.ToDownload.Count > 0) parts.Add($"下载了 {report.ToDownload.Count} 个");
+            w.Toast($"前置已处理：{string.Join("，", parts)}", ToastKind.Success);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            fixing.Close();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            fixing.Close();
+            Log.Error(ex, "处理前置失败");
+            return await w.Confirm("前置没有全部处理好", ex.Message, launching ? "仍然启动" : "知道了", launching ? "取消" : null) && launching;
+        }
+    }
+
+    private enum DependencyChoice { Cancel, Ignore, Fix }
+
+    private static Task<DependencyChoice> ShowDependencyDialogAsync(DependencyReport report, bool launching)
+    {
+        var w = MainWindow.Instance!;
+        var tcs = new TaskCompletionSource<DependencyChoice>();
+        var body = new StackPanel { Width = 600 };
+        body.Children.Add(new TextBlock { Text = "有前置模组没有准备好", Style = (Style)w.FindResource("T.H2"), FontSize = 20 });
+        body.Children.Add(new TextBlock
+        {
+            Text = launching ? "缺少前置时游戏很可能启动失败。可以一键处理后再启动。" : "下面是检查出来的问题：",
+            Style = (Style)w.FindResource("T.Soft"), Margin = new Thickness(0, 8, 0, 12),
+        });
+
+        var list = new StackPanel();
+        void Section(string title, IEnumerable<string> lines)
+        {
+            var items = lines.ToList();
+            if (items.Count == 0) return;
+            list.Children.Add(new TextBlock { Text = title, Style = (Style)w.FindResource("T.Label"), Margin = new Thickness(0, list.Children.Count == 0 ? 0 : 12, 0, 4) });
+            foreach (var line in items)
+                list.Children.Add(new TextBlock { Text = line, Style = (Style)w.FindResource("T.Body"), FontSize = 13, Margin = new Thickness(8, 1, 0, 1) });
+        }
+        Section($"需要启用（{report.ToEnable.Count}）", report.ToEnable.Select(e => $"· {e.Mod.Name}　—— {e.RequiredBy} 需要"));
+        Section($"需要下载（{report.ToDownload.Count}）", report.ToDownload.Select(d => $"· {d.Title} {d.File.VersionName}（{d.File.SizeText}）　—— {d.RequiredBy} 需要"));
+        Section($"自动找不到（{report.Unresolved.Count}）", report.Unresolved.Select(u => $"· {u.Id}　—— {u.RequiredBy} 需要"));
+        if (report.Unresolved.Count > 0)
+            list.Children.Add(new TextBlock
+            {
+                Text = report.OnlineError is null ? "这些前置在资源平台上没有找到，可能需要去模组作者的页面手动下载。" : $"联网查找失败（{report.OnlineError}），请检查网络后再试。",
+                Style = (Style)w.FindResource("T.Caption"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 6, 0, 0),
+            });
+        body.Children.Add(new ScrollViewer { Content = list, MaxHeight = 340, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+        DialogHandle? handle = null;
+        void Done(DependencyChoice c) { handle!.Close(); tcs.TrySetResult(c); }
+        var cancel = new Button { Content = launching ? "取消" : "关闭", Margin = new Thickness(0, 0, 10, 0), MinWidth = 84 };
+        cancel.Click += (_, _) => Done(DependencyChoice.Cancel);
+        buttons.Children.Add(cancel);
+        if (launching)
+        {
+            var ignore = new Button { Content = "仍然启动", Margin = new Thickness(0, 0, 10, 0) };
+            ignore.Click += (_, _) => Done(DependencyChoice.Ignore);
+            buttons.Children.Add(ignore);
+        }
+        if (report.CanFix)
+        {
+            var fixText = report.ToEnable.Count > 0 && report.ToDownload.Count > 0 ? "一键启用并下载" : report.ToEnable.Count > 0 ? "一键启用" : "一键下载";
+            var fix = new Button { Content = launching ? fixText + "，然后启动" : fixText, Style = (Style)w.FindResource("Btn.Primary") };
+            fix.Click += (_, _) => Done(DependencyChoice.Fix);
+            buttons.Children.Add(fix);
+        }
+        body.Children.Add(buttons);
+        handle = w.ShowDialog(body, 680);
+        handle.OnEscape = () => Done(DependencyChoice.Cancel);
+        return tcs.Task;
+    }
 
     /// <summary>
     /// 等到游戏窗口出现、进程退出或超时

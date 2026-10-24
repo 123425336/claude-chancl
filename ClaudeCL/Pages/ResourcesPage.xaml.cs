@@ -230,40 +230,76 @@ public partial class ResourcesPage : UserControl, IPage
             return;
         }
 
+
         button.IsEnabled = false;
         var runDir = target.RunDir(Settings.Current.GameDir);
+        var folder = Path.Combine(runDir, type switch { "resourcepack" => "resourcepacks", "shader" => "shaderpacks", _ => "mods" });
         try
         {
-            var files = await ModrinthClient.GetFilesAsync(project.Id, target.GameVersion, loader, CancellationToken.None);
-            var file = files.FirstOrDefault();
-            if (file is null)
+            // 先算出文件夹里已有文件的哈希：标出“已安装”的版本，以及找到同一个模组的旧版本
+            var local = await Task.Run(() =>
             {
-                w.Toast($"{project.Title} 还没有适用于 {target.GameVersion} 的版本", ToastKind.Error);
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (!Directory.Exists(folder)) return map;
+                foreach (var f in Directory.EnumerateFiles(folder).Where(f => f.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".jar.disabled", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try { map[f] = ModUpdater.Sha1(f); } catch (IOException) { /* 被占用时跳过 */ }
+                }
+                return map;
+            });
+            button.IsEnabled = true;
+            var picked = await VersionPicker.ShowAsync(project, target, loader, local.Values.ToHashSet(StringComparer.OrdinalIgnoreCase));
+            if (picked is null) return;
+            button.IsEnabled = false;
+            if (picked.Sha1 is not null && local.ContainsValue(picked.Sha1))
+            {
+                w.Toast($"{project.Title} {picked.VersionName} 已经装好了");
                 return;
             }
-            await ModrinthClient.DownloadAsync(file, type, runDir, CancellationToken.None);
 
-            // 顺带安装必需的前置模组
-            var deps = new List<string>();
-            foreach (var dep in file.RequiredProjects)
+            // 同一个模组的其他版本（装新版本后移到回收站，避免两个版本同时加载）
+            var oldFiles = new List<string>();
+            var present = new HashSet<string>();
+            if (type == "mod" && local.Count > 0)
             {
                 try
                 {
-                    var depFiles = await ModrinthClient.GetFilesAsync(dep, target.GameVersion, loader, CancellationToken.None);
-                    if (depFiles.FirstOrDefault() is { } df)
-                    {
-                        await ModrinthClient.DownloadAsync(df, "mod", runDir, CancellationToken.None);
-                        deps.Add(Path.GetFileNameWithoutExtension(df.FileName));
-                    }
+                    var lookup = await ModrinthClient.LookupAsync(local.Values.Distinct().ToList(), CancellationToken.None);
+                    present.UnionWith(lookup.Values.Select(v => v.ProjectId));
+                    oldFiles.AddRange(local.Where(kv => lookup.TryGetValue(kv.Value, out var info) && info.ProjectId == project.Id).Select(kv => kv.Key));
                 }
-                catch (Exception ex)
+                catch (Exception ex) { Log.Warn("识别已安装模组失败：" + ex.Message); }
+            }
+
+            await Downloader.RunAsync([new DlItem(Path.Combine(folder, picked.FileName), [picked.Url], picked.Sha1, picked.Size)], null, CancellationToken.None);
+            foreach (var old in oldFiles.Where(f => !string.Equals(Path.GetFileName(f), picked.FileName, StringComparison.OrdinalIgnoreCase)))
+            {
+                try { Shell.MoveToRecycleBin(old); }
+                catch (Exception ex) { Log.Warn($"移除旧版本 {old} 失败：{ex.Message}"); }
+            }
+
+            // 递归安装必需的前置（前置的前置也一起）
+            var deps = 0;
+            if (type == "mod" && picked.RequiredProjects.Length > 0)
+            {
+                present.Add(project.Id);
+                var plans = await DependencyChecker.ResolveProjectsAsync(picked.RequiredProjects, project.Title, target, present, CancellationToken.None);
+                foreach (var plan in plans)
                 {
-                    Log.Warn($"前置 {dep} 安装失败：{ex.Message}");
+                    try
+                    {
+                        await Downloader.RunAsync([new DlItem(Path.Combine(folder, plan.File.FileName), [plan.File.Url], plan.File.Sha1, plan.File.Size)], null, CancellationToken.None);
+                        deps++;
+                    }
+                    catch (Exception ex) { Log.Warn($"前置 {plan.Title} 安装失败：{ex.Message}"); }
                 }
             }
-            w.Toast(deps.Count == 0
-                ? $"{project.Title} 已装进 {target.Id}"
-                : $"{project.Title} 已装进 {target.Id}，还顺手装好了 {deps.Count} 个前置", ToastKind.Success);
+
+            var msg = $"{project.Title} {picked.VersionName} 已装进 {target.Id}";
+            if (oldFiles.Count > 0) msg += "，替换了旧版本";
+            if (deps > 0) msg += $"，还装好了 {deps} 个前置";
+            w.Toast(msg, ToastKind.Success);
         }
         catch (Exception ex)
         {

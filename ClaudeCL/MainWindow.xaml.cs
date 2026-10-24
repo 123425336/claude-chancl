@@ -158,6 +158,22 @@ public partial class MainWindow : Window
             CloseOverlay(log);
             await Task.Delay(400);
         }
+        if (AppState.SelectedVersion is { ModLoaderName: not null } depVersion)
+        {
+            // 启动前的前置检查弹窗
+            _ = LaunchFlow.CheckDependenciesAsync(depVersion, true);
+            await Task.Delay(12000);
+            Save(System.IO.Path.Combine(dir, "light-deps.png"));
+            while (_dialogs.Count > 0) { _dialogs[^1].OnEscape?.Invoke(); await Task.Delay(300); }
+            // 选择模组版本的窗口
+            if (await ModrinthClient.FindProjectAsync("sodium", default) is { } sodium)
+            {
+                _ = VersionPicker.ShowAsync(sodium, depVersion, depVersion.ModLoaderName, new HashSet<string>());
+                await Task.Delay(5000);
+                Save(System.IO.Path.Combine(dir, "light-picker.png"));
+                while (_dialogs.Count > 0) { _dialogs[^1].OnEscape?.Invoke(); await Task.Delay(300); }
+            }
+        }
         Navigate("home");
         _ = Confirm("这是一个对话框", "用来确认截图里的对话框样式是否好看。", "好的", "取消");
         await Task.Delay(600);
