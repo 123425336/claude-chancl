@@ -86,6 +86,9 @@ public partial class MainWindow : Window
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(380)) { EasingFunction = new CubicEase() };
         fade.Completed += (_, _) => Splash.Visibility = Visibility.Collapsed;
         Splash.BeginAnimation(OpacityProperty, fade);
+
+        if (App.UpdatedTo is { } tag) Toast($"已经更新到 {tag} 啦，看看有什么新变化吧～", ToastKind.Success);
+        else if (Settings.Current.AutoCheckUpdate && !Environment.GetCommandLineArgs().Contains("--shot")) _ = CheckUpdateAsync(false);
 #if DEBUG
         var args = Environment.GetCommandLineArgs();
         var idx = Array.IndexOf(args, "--shot");
@@ -175,6 +178,102 @@ public partial class MainWindow : Window
         enc.Save(fs);
     }
 #endif
+
+    // ---------------- 自动更新 ----------------
+
+    /// <summary>
+    /// 检查新版本；manual 为 true 时（手动点击）没有新版也会提示
+    /// </summary>
+    public async Task CheckUpdateAsync(bool manual)
+    {
+        try
+        {
+            var release = await SelfUpdater.CheckAsync(default);
+            if (release is null)
+            {
+                if (manual) Toast($"已经是最新版本啦（v{SelfUpdater.Current}）", ToastKind.Success);
+                return;
+            }
+            Log.Info($"发现新版本 {release.Tag}");
+            ShowUpdateDialog(release);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("检查更新失败：" + ex.Message);
+            if (manual) Toast("检查更新失败：" + ex.GetBaseException().Message, ToastKind.Error);
+        }
+    }
+
+    private void ShowUpdateDialog(ReleaseInfo r)
+    {
+        var body = new StackPanel { Width = 560 };
+        body.Children.Add(new TextBlock { Text = $"发现新版本 {r.Tag}", Style = (Style)FindResource("T.H2"), FontSize = 20 });
+        body.Children.Add(new TextBlock
+        {
+            Text = $"当前是 v{SelfUpdater.Current}，下载约 {Installer.FormatSize(r.AssetSize)}。更新后会自动重启，设置和账号都会保留。",
+            Style = (Style)FindResource("T.Soft"), Margin = new Thickness(0, 8, 0, 12),
+        });
+        body.Children.Add(new TextBox
+        {
+            Text = string.IsNullOrWhiteSpace(r.Notes) ? "（这个版本没有写更新说明）" : r.Notes,
+            Style = (Style)FindResource("TextBox.Code"), MaxHeight = 280,
+        });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+        var page = new Button { Content = "查看发布页", Style = (Style)FindResource("Btn.Ghost"), Margin = new Thickness(0, 0, 10, 0) };
+        var later = new Button { Content = "稍后", Margin = new Thickness(0, 0, 10, 0), MinWidth = 84 };
+        var now = new Button { Content = "立即更新", Style = (Style)FindResource("Btn.Primary"), MinWidth = 100 };
+        Controls.Ui.SetIcon(now, "");
+        buttons.Children.Add(page);
+        buttons.Children.Add(later);
+        buttons.Children.Add(now);
+        body.Children.Add(buttons);
+        var handle = ShowDialog(body, 640);
+        page.Click += (_, _) => Shell.Open(r.HtmlUrl);
+        later.Click += (_, _) => handle.Close();
+        handle.OnEscape = handle.Close;
+        now.Click += async (_, _) =>
+        {
+            handle.Close();
+            await UpdateNowAsync(r);
+        };
+    }
+
+    private async Task UpdateNowAsync(ReleaseInfo r)
+    {
+        if (!SelfUpdater.CanWriteAppDir())
+        {
+            if (await Confirm("没法自动更新", "程序所在的文件夹没有写入权限（比如放在 Program Files 里）。可以打开发布页手动下载。", "打开发布页", "取消"))
+                Shell.Open(r.HtmlUrl);
+            return;
+        }
+        if (GameLauncher.Running is not null &&
+            !await Confirm("游戏正在运行", "更新后启动器会自动重启。正在运行的游戏不受影响，但实时日志会断开。", "继续更新", "稍后"))
+            return;
+
+        using var cts = new System.Threading.CancellationTokenSource();
+        var dialog = Controls.ProgressDialog.Show($"正在更新到 {r.Tag}", cts);
+        try
+        {
+            var zip = await SelfUpdater.DownloadAsync(r, dialog.Progress, cts.Token);
+            dialog.Report(new StageProgress("替换程序文件", 0.94));
+            await Task.Run(() => SelfUpdater.Apply(zip));
+            dialog.Report(new StageProgress("更新完成，正在重启", 1));
+            await Task.Delay(600);
+            SelfUpdater.Restart(r.Tag);
+        }
+        catch (OperationCanceledException)
+        {
+            dialog.Close();
+            Toast("已取消更新");
+        }
+        catch (Exception ex)
+        {
+            dialog.Close();
+            Log.Error(ex, "自动更新失败");
+            if (await Confirm("更新没有完成", ex.Message + "\n\n程序文件已经还原，可以继续使用当前版本。", "打开发布页", "知道了"))
+                Shell.Open(r.HtmlUrl);
+        }
+    }
 
     // ---------------- 导航 ----------------
 

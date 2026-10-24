@@ -14,6 +14,7 @@
                         <TextBlock Style="{StaticResource T.Soft}"
                                    Text="一个温柔的 Minecraft 启动器。希望它像一本安静的书，帮你把每一次冒险都翻得顺顺利利。"/>
                         <WrapPanel Margin="0,16,0,0">
+                            <Button x:Name="UpdateButton" Content="检查更新" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE72C;" Margin="0,0,8,8" Click="CheckUpdate_Click"/>
                             <Button Content="数据目录" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="Data_Click"/>
                             <Button Content="启动器日志" c:Ui.Icon="&#xE8B7;" Margin="0,0,8,8" Click="Logs_Click"/>
                             <Button Content="开源许可" c:Ui.Icon="&#xE8A5;" Margin="0,0,8,8" Click="License_Click"/>

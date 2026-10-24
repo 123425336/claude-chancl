@@ -29,6 +29,7 @@ public partial class SettingsPage : UserControl, IPage
         ThemeDark.IsChecked = s.Theme == AppTheme.Dark;
         ThemeSystem.IsChecked = s.Theme == AppTheme.System;
         MascotCheck.IsChecked = s.ShowMascot;
+        AutoUpdateCheck.IsChecked = s.AutoCheckUpdate;
         AutoMemCheck.IsChecked = s.AutoMemory;
         MemSlider.Value = Math.Clamp(s.MaxMemoryMb, MemSlider.Minimum, MemSlider.Maximum);
         WidthBox.Text = s.WindowWidth.ToString();
@@ -134,6 +135,7 @@ public partial class SettingsPage : UserControl, IPage
         if (_loading || !IsLoaded) return;
         var s = Settings.Current;
         s.ShowMascot = MascotCheck.IsChecked == true;
+        s.AutoCheckUpdate = AutoUpdateCheck.IsChecked == true;
         s.AutoMemory = AutoMemCheck.IsChecked == true;
         s.MaxMemoryMb = (int)MemSlider.Value;
         if (int.TryParse(WidthBox.Text, out var w) && w is >= 320 and <= 10000) s.WindowWidth = w;

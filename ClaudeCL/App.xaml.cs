@@ -33,7 +33,19 @@ public partial class App : Application
         }
 
         Settings.Load();
+
+        // 自动更新后的第一次启动：记下新版本号，稍后提示；顺便清理旧版本留下的文件
+        var updated = Array.IndexOf(e.Args, "--updated");
+        if (updated >= 0 && updated + 1 < e.Args.Length) UpdatedTo = e.Args[updated + 1];
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            SelfUpdater.CleanupOldFiles();
+        });
 #if DEBUG
+        // 调试：假装成旧版本，用来测试自动更新
+        var pretend = Array.IndexOf(e.Args, "--pretend-version");
+        if (pretend >= 0 && pretend + 1 < e.Args.Length) SelfUpdater.Current = Version.Parse(e.Args[pretend + 1]);
         // 调试自检：不显示窗口，安装并启动后退出
         var a = e.Args;
         // 调试截图时指定临时游戏目录，且不改动用户的设置文件
@@ -112,6 +124,42 @@ public partial class App : Application
             Shutdown(0);
             return;
         }
+        if (a.Length >= 2 && a[0] == "--self-update-test")
+        {
+            // 调试：不显示窗口，走一遍“检查 → 下载 → 替换 → 重启”
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var report = new System.Collections.Generic.List<string> { $"当前版本 {SelfUpdater.Current}，{(SelfUpdater.IsSelfContained ? "免安装版" : "轻量版")}，程序目录可写：{SelfUpdater.CanWriteAppDir()}" };
+                void Save() => System.IO.File.WriteAllLines(a[1], report, new System.Text.UTF8Encoding(false));
+                try
+                {
+                    var r = await SelfUpdater.CheckAsync(default);
+                    if (r is null)
+                    {
+                        report.Add("没有发现新版本");
+                        Save();
+                        Dispatcher.Invoke(() => Shutdown(0));
+                        return;
+                    }
+                    report.Add($"发现 {r.Tag}：下载 {r.AssetName}（{r.AssetSize} 字节，SHA256 {(r.Sha256 ?? "无")}）");
+                    var stages = new System.Collections.Generic.List<string>();
+                    var zip = await SelfUpdater.DownloadAsync(r, new SyncProgress(p => { if (!stages.Contains(p.Stage)) stages.Add(p.Stage); }), default);
+                    report.Add($"下载完成并校验通过：{zip}（经过阶段：{string.Join(" → ", stages)}）");
+                    SelfUpdater.Apply(zip);
+                    report.Add("文件替换完成，正在重启到新版本");
+                    Save();
+                    Dispatcher.Invoke(() => SelfUpdater.Restart(r.Tag));
+                }
+                catch (Exception ex)
+                {
+                    report.Add("失败：" + ex);
+                    Save();
+                    Dispatcher.Invoke(() => Shutdown(1));
+                }
+            });
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--update-test")
         {
             // 调试：检查指定版本的模组更新并全部执行，输出前后对比
@@ -187,6 +235,17 @@ public partial class App : Application
     }
 
     public static bool IsDark { get; private set; }
+
+#if DEBUG
+    /// <summary>直接在调用线程上转发的进度回调（调试用）</summary>
+    private sealed class SyncProgress(Action<StageProgress> action) : IProgress<StageProgress>
+    {
+        public void Report(StageProgress value) => action(value);
+    }
+#endif
+
+    /// <summary>刚刚自动更新到的版本号（没有更新时为空）</summary>
+    public static string? UpdatedTo { get; private set; }
 
     private static bool IsSystemDark()
     {

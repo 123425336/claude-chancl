@@ -42,6 +42,9 @@ public sealed class LauncherSettings
     /// <summary>把短时间内大量重复的游戏日志折叠成一条</summary>
     public bool FoldRepeatedLogs { get; set; } = true;
 
+    /// <summary>启动时检查 GitHub 上有没有新版本</summary>
+    public bool AutoCheckUpdate { get; set; } = true;
+
     public DownloadSource Source { get; set; } = DownloadSource.Auto;
     public int DownloadThreads { get; set; } = 48;
 
