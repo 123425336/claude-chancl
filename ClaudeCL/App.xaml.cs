@@ -290,6 +290,13 @@ public partial class App : Application
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             return;
         }
+        if (a.Length >= 4 && a[0] == "--pack-test")
+        {
+            Settings.ReadOnly = true;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = SelfTest.RunPackAsync(a[1], a[2], a[3], !a.Contains("--no-launch")).ContinueWith(t => Dispatcher.Invoke(() => Shutdown(t.Result)));
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--selftest")
         {
             Settings.ReadOnly = true;

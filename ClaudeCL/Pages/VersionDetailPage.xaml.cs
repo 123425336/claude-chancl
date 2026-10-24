@@ -32,6 +32,9 @@ public partial class VersionDetailPage : UserControl, IPage
 
     /// <summary>当前列出的模组（调试截图用）</summary>
     internal IReadOnlyList<ModEntry> Mods => _mods;
+
+    /// <summary>正在查看的版本（拖入文件时默认装到这里）</summary>
+    internal InstalledVersion Version => _version;
     private string ModsDir => Path.Combine(RunDir, "mods");
 
     public void OnShown()
@@ -223,7 +226,7 @@ public partial class VersionDetailPage : UserControl, IPage
                 ? "没有符合条件的模组。"
                 : _version.ModLoaderName is null
                     ? "这个版本没有模组加载器，模组放进来也不会生效。\n可以在「加载器」里给它装一个。"
-                    : "还没有模组呢，点右上角「添加模组」去资源中心挑几个吧。";
+                    : "还没有模组呢，可以把模组文件直接拖进窗口，\n或者点右上角「添加模组」去资源中心挑几个。";
             ModsEmpty.Visibility = Visibility.Visible;
         }
         else ModsEmpty.Visibility = Visibility.Collapsed;

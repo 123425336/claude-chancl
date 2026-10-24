@@ -26,10 +26,13 @@ public sealed class InstalledVersion
     public string Type { get; init; } = "release";
     public DateTime ModifiedAt { get; init; }
 
+    /// <summary>从整合包安装的版本（总是使用自己的文件夹作为游戏目录）</summary>
+    public bool FromModpack { get; init; }
+
     public bool IsValid => Json is not null && Error is null;
 
     /// <summary>该版本实际运行时使用的游戏目录（受“版本隔离”设置影响）</summary>
-    public string RunDir(string gameDir) => Settings.Current.IsolateVersions ? Dir : gameDir;
+    public string RunDir(string gameDir) => Settings.Current.IsolateVersions || FromModpack ? Dir : gameDir;
 
     public string LoaderText => Loader switch
     {
@@ -153,6 +156,7 @@ public static class VersionStore
             {
                 Id = id, Dir = dir, Json = json, Loader = loader, LoaderVersion = loaderVer, HasOptiFine = hasOptiFine,
                 GameVersion = gameVer, Type = (string?)json["type"] ?? "release", ModifiedAt = modified,
+                FromModpack = File.Exists(Path.Combine(dir, ModpackInstaller.MarkerFile)),
             };
         }
         catch (Exception ex)

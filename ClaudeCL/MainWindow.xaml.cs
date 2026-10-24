@@ -93,10 +93,80 @@ public partial class MainWindow : Window
         var args = Environment.GetCommandLineArgs();
         var idx = Array.IndexOf(args, "--shot");
         if (idx >= 0 && idx + 1 < args.Length) await CaptureAllAsync(args[idx + 1]);
+        var di = Array.IndexOf(args, "--drop-shot");
+        if (di >= 0 && di + 2 < args.Length) await DropShotAsync(args[di + 1], args[(di + 2)..].TakeWhile(x => !x.StartsWith("--")).ToArray());
+        var mi = Array.IndexOf(args, "--modpack-shot");
+        if (mi >= 0 && mi + 1 < args.Length) await ModpackShotAsync(args[mi + 1]);
 #endif
     }
 
 #if DEBUG
+    /// <summary>
+    /// 调试用：截下资源中心的整合包列表和整合包版本选择窗口
+    /// </summary>
+    private async Task ModpackShotAsync(string dir)
+    {
+        System.IO.Directory.CreateDirectory(dir);
+        await Task.Delay(800);
+        Navigate("resources");
+        var page = GetPage<ResourcesPage>("resources")!;
+        await Task.Delay(1500);
+        page.ModpackChip.IsChecked = true;
+        await Task.Delay(5000);
+        Save(System.IO.Path.Combine(dir, "modpack-list.png"));
+        if (page.Results.Items.Count > 0 && page.Results.Items[0] is ResourceProject first)
+        {
+            _ = ImportFlow.InstallFromPlatformAsync(first);
+            await Task.Delay(5000);
+            Save(System.IO.Path.Combine(dir, "modpack-picker.png"));
+            while (_dialogs.Count > 0) { _dialogs[^1].OnEscape?.Invoke(); await Task.Delay(300); }
+        }
+        Close();
+    }
+
+    /// <summary>
+    /// 调试用：模拟把文件拖进窗口，截下拖放提示和安装对话框；文件安装对话框会自动点“安装”
+    /// </summary>
+    private async Task DropShotAsync(string dir, string[] files)
+    {
+        System.IO.Directory.CreateDirectory(dir);
+        await Task.Delay(800);
+        if (AppState.SelectedVersion is { } v) ShowVersionDetail(v);
+        await Task.Delay(1500);
+        DropHint.Text = $"模组、资源包和光影会装进 {ImportFlow.DefaultTarget()?.Id}，\n整合包会安装成一个新版本。";
+        DropLayer.Visibility = Visibility.Visible;
+        await Task.Delay(500);
+        Save(System.IO.Path.Combine(dir, "drop-layer.png"));
+        DropLayer.Visibility = Visibility.Collapsed;
+
+        var task = ImportFlow.HandleDropAsync(files);
+        for (var step = 0; step < 4 && !task.IsCompleted; step++)
+        {
+            await Task.Delay(3000);
+            if (_dialogs.Count == 0) continue;
+            Save(System.IO.Path.Combine(dir, $"drop-dialog-{step}.png"));
+            var top = _dialogs[^1];
+            // 文件安装对话框直接确认，整合包对话框只截图后取消
+            var buttons = FindChildren<Button>(top.Container).ToList();
+            var install = buttons.FirstOrDefault(b => b.IsDefault && (string?)b.Content == "安装");
+            if (install is not null) install.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            else top.OnEscape?.Invoke();
+        }
+        await Task.Delay(1500);
+        Save(System.IO.Path.Combine(dir, "drop-after.png"));
+        Close();
+    }
+
+    private static IEnumerable<T> FindChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T t) yield return t;
+            foreach (var c in FindChildren<T>(child)) yield return c;
+        }
+    }
+
     /// <summary>
     /// 调试用：依次打开每个页面并截图保存，然后退出
     /// </summary>
@@ -457,6 +527,43 @@ public partial class MainWindow : Window
         };
         OverlayLayer.BeginAnimation(OpacityProperty, fade);
         OverlayShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, TimeSpan.FromMilliseconds(180)));
+    }
+
+    // ---------------- 拖放安装 ----------------
+
+    /// <summary>当前显示的页面（版本详情页不在侧栏里，也能取到）</summary>
+    public FrameworkElement? CurrentPage => PageHost.Content as FrameworkElement;
+
+    private static bool HasFiles(DragEventArgs e) => e.Data.GetDataPresent(DataFormats.FileDrop);
+
+    private void Window_PreviewDragEnter(object sender, DragEventArgs e)
+    {
+        // 启动画面或对话框打开时不接收
+        if (!HasFiles(e) || Splash.Visibility == Visibility.Visible || _dialogs.Count > 0 || DropLayer.Visibility == Visibility.Visible) return;
+        var target = ImportFlow.DefaultTarget();
+        DropHint.Text = target is null
+            ? "整合包会安装成一个新版本。\n要装模组、资源包或光影，得先安装一个游戏版本哦。"
+            : $"模组、资源包和光影会装进 {target.Id}，\n整合包会安装成一个新版本。";
+        DropLayer.Visibility = Visibility.Visible;
+        DropLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+    }
+
+    private void DropLayer_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = HasFiles(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void DropLayer_DragLeave(object sender, DragEventArgs e) => DropLayer.Visibility = Visibility.Collapsed;
+
+    private async void DropLayer_Drop(object sender, DragEventArgs e)
+    {
+        DropLayer.Visibility = Visibility.Collapsed;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0) return;
+        e.Handled = true;
+        // 先让拖放操作结束，资源管理器那边才不会一直等着
+        await System.Windows.Threading.Dispatcher.Yield();
+        await ImportFlow.HandleDropAsync(paths);
     }
 
     // ---------------- 通知 ----------------

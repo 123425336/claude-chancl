@@ -12,7 +12,7 @@
 
         <StackPanel>
             <TextBlock Text="资源中心" Style="{StaticResource T.H1}"/>
-            <TextBlock Text="模组、资源包和光影，都会装进你选择的版本里。" Style="{StaticResource T.Soft}" Margin="0,4,0,16"/>
+            <TextBlock Text="模组、资源包和光影会装进你选择的版本里，整合包会一键装成新版本。" Style="{StaticResource T.Soft}" Margin="0,4,0,16"/>
         </StackPanel>
 
         <!-- 筛选栏 -->
@@ -26,6 +26,7 @@
                 <RadioButton x:Name="ModChip" Style="{StaticResource Chip}" Content="模组" GroupName="ResType" IsChecked="True" Checked="Type_Changed"/>
                 <RadioButton x:Name="PackChip" Style="{StaticResource Chip}" Content="资源包" GroupName="ResType" Checked="Type_Changed"/>
                 <RadioButton x:Name="ShaderChip" Style="{StaticResource Chip}" Content="光影" GroupName="ResType" Checked="Type_Changed"/>
+                <RadioButton x:Name="ModpackChip" Style="{StaticResource Chip}" Content="整合包" GroupName="ResType" Checked="Type_Changed"/>
             </StackPanel>
             <TextBox x:Name="SearchBox" Grid.Column="1" Margin="8,0,10,0" c:Ui.Placeholder="搜索，例如 钠、小地图、JEI……（按回车）" c:Ui.Clearable="True"
                      KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
@@ -38,6 +39,8 @@
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
+            <TextBlock x:Name="ModpackHint" Grid.Column="2" Text="整合包会安装成新版本" Style="{StaticResource T.Caption}"
+                       VerticalAlignment="Center" Margin="13,0,0,0" Visibility="Collapsed"/>
             <TextBlock x:Name="NoTargetHint" Grid.Column="2" Text="还没有安装版本" Style="{StaticResource T.Caption}"
                        VerticalAlignment="Center" Margin="13,0,0,0" IsHitTestVisible="False" Visibility="Collapsed"/>
         </Grid>

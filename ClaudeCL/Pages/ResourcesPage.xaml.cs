@@ -28,7 +28,8 @@ public partial class ResourcesPage : UserControl, IPage
         AppState.VersionsChanged += () => Dispatcher.Invoke(RefreshTargets);
     }
 
-    private string ProjectType => PackChip.IsChecked == true ? "resourcepack" : ShaderChip.IsChecked == true ? "shader" : "mod";
+    private string ProjectType => PackChip.IsChecked == true ? "resourcepack" : ShaderChip.IsChecked == true ? "shader"
+        : ModpackChip.IsChecked == true ? "modpack" : "mod";
     private InstalledVersion? Target => TargetBox.SelectedItem as InstalledVersion;
 
     public void OnShown()
@@ -43,12 +44,20 @@ public partial class ResourcesPage : UserControl, IPage
         var list = AppState.Versions.Where(v => v.IsValid).ToList();
         TargetBox.ItemsSource = list;
         TargetBox.SelectedItem = list.FirstOrDefault(v => v.Id == current) ?? list.FirstOrDefault();
-        NoTargetHint.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoTargetHint.Visibility = list.Count == 0 && ProjectType != "modpack" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Type_Changed(object sender, RoutedEventArgs e)
     {
-        if (IsLoaded) _ = SearchAsync(false);
+        // 初始化时控件还没创建完
+        if (TargetBox is null || ModpackHint is null || NoTargetHint is null) return;
+        // 整合包会装成新版本，不需要选目标版本
+        var modpack = ProjectType == "modpack";
+        TargetBox.Visibility = modpack ? Visibility.Collapsed : Visibility.Visible;
+        ModpackHint.Visibility = modpack ? Visibility.Visible : Visibility.Collapsed;
+        NoTargetHint.Visibility = !modpack && TargetBox.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // 页面还没显示时，等显示后再搜索
+        if (IsLoaded || _searched) _ = SearchAsync(false);
     }
 
     private void Target_Changed(object sender, SelectionChangedEventArgs e)
@@ -90,7 +99,8 @@ public partial class ResourcesPage : UserControl, IPage
         MoreButton.IsEnabled = false;
         try
         {
-            var target = Target;
+            // 整合包不按已安装的版本筛选
+            var target = ProjectType == "modpack" ? null : Target;
             _lastQuery = SearchBox.Text.Trim();
             var (items, total) = await ModrinthClient.SearchAsync(SearchBox.Text.Trim(), ProjectType,
                 target?.GameVersion, target?.ModLoaderName, _offset, ct);
@@ -215,6 +225,13 @@ public partial class ResourcesPage : UserControl, IPage
     {
         var w = MainWindow.Instance!;
         if (sender is not Button { Tag: ResourceProject project } button) return;
+        if (project.ProjectType == "modpack")
+        {
+            button.IsEnabled = false;
+            try { await ImportFlow.InstallFromPlatformAsync(project); }
+            finally { button.IsEnabled = true; }
+            return;
+        }
         var target = Target;
         if (target is null)
         {

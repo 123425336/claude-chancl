@@ -16,8 +16,9 @@ namespace ClaudeCL.Pages;
 /// </summary>
 public static class VersionPicker
 {
+    /// <param name="target">装到哪个版本；整合包会装成新版本，传 null 时列出全部文件</param>
     /// <param name="installedSha1s">已安装文件的哈希，用来标出“已安装”</param>
-    public static Task<ResourceFile?> ShowAsync(ResourceProject project, InstalledVersion target, string? loader, ISet<string> installedSha1s)
+    public static Task<ResourceFile?> ShowAsync(ResourceProject project, InstalledVersion? target, string? loader, ISet<string> installedSha1s)
     {
         var w = MainWindow.Instance!;
         var tcs = new TaskCompletionSource<ResourceFile?>();
@@ -25,10 +26,11 @@ public static class VersionPicker
         body.Children.Add(new TextBlock { Text = $"安装 {project.Title}", Style = (Style)w.FindResource("T.H2"), FontSize = 20, TextTrimming = TextTrimming.CharacterEllipsis });
         body.Children.Add(new TextBlock
         {
-            Text = $"装到 {target.Id}（{target.GameVersion}{(loader is null ? "" : " · " + loader)}），选一个版本：",
+            Text = target is null ? "会安装成一个新的游戏版本，选一个整合包版本：" : $"装到 {target.Id}（{target.GameVersion}{(loader is null ? "" : " · " + loader)}），选一个版本：",
             Style = (Style)w.FindResource("T.Soft"), Margin = new Thickness(0, 6, 0, 10),
         });
         var showAll = new CheckBox { Content = "显示所有游戏版本的文件（可能和当前版本不兼容）", Margin = new Thickness(0, 0, 0, 10) };
+        if (target is null) showAll.Visibility = Visibility.Collapsed;
         body.Children.Add(showAll);
 
         var host = new Grid { Height = 360 };
@@ -63,7 +65,7 @@ public static class VersionPicker
         {
             ok.IsEnabled = list.SelectedItem is ListBoxItem;
             // 选了不兼容的文件时提醒一下
-            if (list.SelectedItem is ListBoxItem { Tag: ResourceFile f } && !f.GameVersions.Contains(target.GameVersion))
+            if (list.SelectedItem is ListBoxItem { Tag: ResourceFile f } && target is not null && !f.GameVersions.Contains(target.GameVersion))
             {
                 warn.Text = $"这个文件标注支持的游戏版本是 {string.Join("、", f.GameVersions.Take(4))}，不包含 {target.GameVersion}，装上后可能无法启动。";
                 warn.Visibility = Visibility.Visible;
@@ -82,13 +84,13 @@ public static class VersionPicker
             hint.Text = "正在查询版本列表……";
             try
             {
-                var all = showAll.IsChecked == true;
-                var files = await ModrinthClient.GetFilesAsync(project.Id, all ? null : target.GameVersion, project.ProjectType == "mod" ? loader : null, ct);
+                var all = showAll.IsChecked == true || target is null;
+                var files = await ModrinthClient.GetFilesAsync(project.Id, all ? null : target!.GameVersion, project.ProjectType == "mod" ? loader : null, ct);
                 if (ct.IsCancellationRequested) return;
                 foreach (var f in files) list.Items.Add(new ListBoxItem { Tag = f, Content = Row(w, f, installedSha1s.Contains(f.Sha1 ?? "")) });
                 if (files.Count == 0)
                 {
-                    hint.Text = all ? "这个资源还没有发布任何文件。" : $"没有适用于 {target.GameVersion} 的版本，可以勾选上面的“显示所有游戏版本”看看。";
+                    hint.Text = all ? "这个资源还没有发布任何文件。" : $"没有适用于 {target!.GameVersion} 的版本，可以勾选上面的“显示所有游戏版本”看看。";
                     return;
                 }
                 // 默认选中最新的正式版

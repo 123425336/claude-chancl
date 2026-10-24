@@ -66,6 +66,8 @@ public partial class DownloadPage : UserControl, IPage
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _ = LoadAsync(true);
 
+    private void ImportPack_Click(object sender, RoutedEventArgs e) => _ = ImportFlow.PickModpackAsync();
+
     private void Filter_Changed(object sender, RoutedEventArgs e)
     {
         if (_loaded) ApplyFilter();

@@ -13,10 +13,14 @@
             <ColumnDefinition Width="310"/>
         </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.ColumnSpan="2">
-            <TextBlock Text="下载游戏" Style="{StaticResource T.H1}"/>
-            <TextBlock Text="挑一个版本，剩下的交给我。" Style="{StaticResource T.Soft}" Margin="0,4,0,16"/>
-        </StackPanel>
+        <DockPanel Grid.ColumnSpan="2">
+            <Button DockPanel.Dock="Right" Content="导入整合包" c:Ui.Icon="&#xE8B5;" Padding="14,7" VerticalAlignment="Top" Margin="0,4,0,0"
+                    Click="ImportPack_Click" ToolTip="选择本地的 .mrpack 或 .zip 整合包，也可以直接把文件拖进窗口"/>
+            <StackPanel>
+                <TextBlock Text="下载游戏" Style="{StaticResource T.H1}"/>
+                <TextBlock Text="挑一个版本，剩下的交给我。有整合包的话，拖进窗口就能装。" Style="{StaticResource T.Soft}" Margin="0,4,0,16"/>
+            </StackPanel>
+        </DockPanel>
 
         <!-- 筛选 -->
         <DockPanel Grid.Row="1" Margin="0,0,20,14">

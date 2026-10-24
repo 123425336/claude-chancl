@@ -72,11 +72,83 @@ public static class SelfTest
 
             var version = VersionStore.Load(gameDir, name);
             W($"版本识别：{version.Summary}");
+            return await LaunchAndWaitAsync(version, progress, W);
+        }
+        catch (Exception ex)
+        {
+            W("失败：" + ex);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 安装整合包并启动，验证整合包能完整加载。
+    /// 用法：ClaudeCL.exe --pack-test 游戏目录 整合包文件 结果文件 [--no-launch]
+    /// </summary>
+    public static async Task<int> RunPackAsync(string gameDir, string packPath, string resultFile, bool launch)
+    {
+        var sb = new StringBuilder();
+        void W(string s)
+        {
+            sb.AppendLine($"[{DateTime.Now:HH:mm:ss}] {s}");
+            File.WriteAllText(resultFile, sb.ToString(), new UTF8Encoding(false));
+        }
+
+        try
+        {
+            Settings.Current.GameDir = gameDir;
+            Settings.Current.WindowWidth = 854;
+            Settings.Current.WindowHeight = 480;
+            // 关闭全局的版本隔离，验证整合包版本仍然使用自己的文件夹
+            Settings.Current.IsolateVersions = false;
+            Directory.CreateDirectory(gameDir);
+            await JavaFinder.ScanAsync();
+
+            var pack = ModpackInstaller.Read(packPath);
+            W($"整合包：{pack.Name} {pack.Version}（{pack.FormatText}），{pack.GameVersion} · {pack.LoaderText}，" +
+              $"{pack.Files.Count} 个直接下载文件，{pack.CurseFiles.Count} 个需查询的文件，覆盖目录：{string.Join("、", pack.OverrideDirs)}");
+            await AppState.RefreshVersionsAsync();
+            var name = ModpackInstaller.SuggestName(gameDir, pack);
+            W($"版本名：{name}");
+            var lastStage = "";
+            var progress = new Progress<StageProgress>(p =>
+            {
+                if (p.Stage != lastStage) { lastStage = p.Stage; W($"阶段：{p.Stage} {p.Detail}"); }
+            });
+            var result = await ModpackInstaller.InstallAsync(pack, name, progress, CancellationToken.None);
+            W(result.Warnings.Count == 0 ? "安装完成，没有问题" : "安装完成，提示：\n  " + string.Join("\n  ", result.Warnings));
+
+            var version = VersionStore.Load(gameDir, name);
+            var runDir = version.RunDir(gameDir);
+            W($"版本识别：{version.Summary}，来自整合包：{version.FromModpack}，游戏目录：{runDir}");
+            foreach (var sub in new[] { "mods", "config", "resourcepacks", "shaderpacks" })
+            {
+                var d = Path.Combine(runDir, sub);
+                W($"  {sub}：{(Directory.Exists(d) ? Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories).Count() + " 个文件" : "无")}");
+            }
+            var marker = ModpackInstaller.ReadMarker(version.Dir);
+            W($"标记文件记录了 {marker?["files"]?.AsArray().Count ?? 0} 个整合包文件");
+            if (!launch) return 0;
+            return await LaunchAndWaitAsync(version, progress, W);
+        }
+        catch (Exception ex)
+        {
+            W("失败：" + ex);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 启动游戏并等到完整加载到主菜单
+    /// </summary>
+    private static async Task<int> LaunchAndWaitAsync(InstalledVersion version, IProgress<StageProgress> progress, Action<string> W)
+    {
+        {
             var account = AccountService.CreateOffline("ClaudeTest");
             var session = await GameLauncher.LaunchAsync(version, account, progress, CancellationToken.None);
             W("进程已启动，等待窗口");
 
-            var deadline = DateTime.Now.AddSeconds(300);
+            var deadline = DateTime.Now.AddSeconds(600);
             while (DateTime.Now < deadline)
             {
                 if (session.Process.HasExited)
@@ -100,11 +172,6 @@ public static class SelfTest
             W("最后日志：\n" + string.Join("\n", session.Lines.TakeLast(60)));
             session.Process.Kill(true);
             return 3;
-        }
-        catch (Exception ex)
-        {
-            W("失败：" + ex);
-            return 1;
         }
     }
 }

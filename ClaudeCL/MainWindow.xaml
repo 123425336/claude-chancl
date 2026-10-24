@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{StaticResource SansFont}" FontSize="13.5"
-        Icon="Assets/app.ico" UseLayoutRounding="True"
+        Icon="Assets/app.ico" UseLayoutRounding="True" AllowDrop="True" PreviewDragEnter="Window_PreviewDragEnter"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="48" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0,0,0,1" UseAeroCaptionButtons="False"/>
@@ -100,6 +100,20 @@
 
         <!-- ========== 对话框层 ========== -->
         <Grid x:Name="DialogLayer" Grid.ColumnSpan="2" Visibility="Collapsed"/>
+
+        <!-- ========== 拖放层：把文件拖进窗口时出现 ========== -->
+        <Grid x:Name="DropLayer" Grid.ColumnSpan="2" Visibility="Collapsed" AllowDrop="True" Background="{DynamicResource OverlayBrush}"
+              DragOver="DropLayer_DragOver" DragLeave="DropLayer_DragLeave" Drop="DropLayer_Drop">
+            <Grid Width="460" Height="330" IsHitTestVisible="False">
+                <Rectangle RadiusX="22" RadiusY="22" Fill="{DynamicResource CardBrush}" Stroke="{DynamicResource AccentBrush}"
+                           StrokeThickness="2.5" StrokeDashArray="5 3"/>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="30,0">
+                    <Image Source="Assets/reading.png" Width="140" Height="140" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="松开就能安装" Style="{StaticResource T.H2}" FontSize="22" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="DropHint" Style="{StaticResource T.Soft}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
 
         <!-- ========== 通知层（右下角） ========== -->
         <StackPanel x:Name="ToastLayer" Grid.ColumnSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
