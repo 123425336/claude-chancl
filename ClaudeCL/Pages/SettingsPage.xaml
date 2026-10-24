@@ -60,6 +60,7 @@
                     <CheckBox x:Name="FullscreenCheck" Content="全屏启动" Margin="0,12,0,0" Click="Any_Changed"/>
                     <CheckBox x:Name="IsolateCheck" Content="版本隔离：每个版本有自己独立的存档、模组和设置" Margin="0,12,0,0" Click="Any_Changed"/>
                     <CheckBox x:Name="DepCheck" Content="启动前检查模组前置是否齐全（包括前置的前置）" Margin="0,12,0,0" Click="Any_Changed"/>
+                    <CheckBox x:Name="LookupCheck" Content="联网识别模组：把模组文件的哈希发给资源平台，用于检查更新、查找前置（关闭后不发送任何模组信息）" Margin="0,12,0,0" Click="Any_Changed"/>
                     <CheckBox x:Name="FoldLogCheck" Content="实时日志自动限频：短时间内大量重复的日志折叠为一条" Margin="0,12,0,0" Click="Any_Changed"/>
                     <CheckBox x:Name="CleanMemCheck" Content="启动游戏前自动清理内存（会弹出管理员授权）" Margin="0,12,0,0" Click="Any_Changed"/>
 

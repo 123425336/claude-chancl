@@ -103,6 +103,11 @@ public partial class VersionDetailPage : UserControl, IPage
         UpdateAllButton.Visibility = Visibility.Collapsed;
         UpdateStatus.Text = "";
         if (_mods.Count == 0 || _version.ModLoaderName is null) return;
+        if (!Settings.Current.AllowOnlineModLookup)
+        {
+            UpdateStatus.Text = "已关闭联网识别，不检查模组更新";
+            return;
+        }
         UpdateChecking.Visibility = Visibility.Visible;
         try
         {

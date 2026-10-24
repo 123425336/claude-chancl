@@ -43,6 +43,9 @@ public sealed class ModEntry : INotifyPropertyChanged
     /// <summary>这个文件提供的模组 ID（含内嵌的子模组与别名），用于判断前置是否满足</summary>
     public HashSet<string> ModIds { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>模组自己的 ID 与别名（不含内嵌在里面的其他模组）</summary>
+    public HashSet<string> OwnIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>声明为必需的前置模组 ID</summary>
     public HashSet<string> RequiredIds { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -152,6 +155,8 @@ public static class ModScanner
         // 部分模组的描述文件里有不合规的换行
         var json = JsonNode.Parse(text.Replace("\n", " ").Replace("\r", " "))!;
         CollectFabricIds(zip, json, mod.ModIds, 0);
+        if ((string?)json["id"] is { } ownId) mod.OwnIds.Add(ownId);
+        foreach (var p in json["provides"]?.AsArray() ?? []) if ((string?)p is { } pid) mod.OwnIds.Add(pid);
         foreach (var (dep, _) in json["depends"] as JsonObject ?? []) mod.RequiredIds.Add(dep);
         mod.Name = (string?)json["name"] ?? (string?)json["id"] ?? "";
         mod.Version = (string?)json["version"] ?? "";
@@ -173,6 +178,7 @@ public static class ModScanner
         var loader = JsonNode.Parse(text)?["quilt_loader"];
         if (loader is null) return false;
         CollectQuiltIds(zip, loader, mod.ModIds, 0);
+        if ((string?)loader["id"] is { } ownId) mod.OwnIds.Add(ownId);
         foreach (var dep in loader["depends"]?.AsArray() ?? [])
         {
             // 依赖可以是字符串，也可以是带 optional 的对象
@@ -193,6 +199,8 @@ public static class ModScanner
         var text = Text(zip, "META-INF/neoforge.mods.toml") ?? Text(zip, "META-INF/mods.toml");
         if (text is null) return false;
         CollectTomlIds(zip, text, mod.ModIds, 0);
+        foreach (Match own in Regex.Matches(text, @"\[\[\s*mods\s*\]\]([\s\S]*?)(?=\n\s*\[|\z)"))
+            if (TomlValue(own.Groups[1].Value, "modId") is { } ownId) mod.OwnIds.Add(ownId);
         foreach (Match m in Regex.Matches(text, @"\[\[\s*dependencies\.[^\]]+\]\]([\s\S]*?)(?=\n\s*\[|\z)"))
         {
             var block = m.Groups[1].Value;
@@ -245,7 +253,11 @@ public static class ModScanner
             _ => null,
         };
         if (first is null) return false;
-        if ((string?)first["modid"] is { } modid) mod.ModIds.Add(modid);
+        if ((string?)first["modid"] is { } modid)
+        {
+            mod.ModIds.Add(modid);
+            mod.OwnIds.Add(modid);
+        }
         // 旧格式的必需前置写成 "模组ID@[版本范围]"
         foreach (var r in first["requiredMods"]?.AsArray() ?? [])
             if ((string?)r is { Length: > 0 } req) mod.RequiredIds.Add(req.Split('@')[0]);

@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace ClaudeCL.Core;
 
+/// <summary>设置里关闭了联网识别模组</summary>
+internal sealed class LookupDisabledException : Exception;
+
 /// <summary>需要下载的一个前置</summary>
 public sealed record DownloadPlan(string Title, string ProjectId, ResourceFile File, string RequiredBy);
 
@@ -46,6 +49,11 @@ public static class DependencyChecker
 
     private const int MaxDepth = 6;
 
+#if DEBUG
+    /// <summary>调试：不联网，只做本地检查</summary>
+    public static bool DebugOffline { get; set; }
+#endif
+
     /// <summary>
     /// 检查一个版本的模组前置。同时使用两种信息：
     /// 模组文件里声明的前置（按模组 ID），以及资源平台上登记的前置（按资源 ID，部分模组只在平台上登记）。
@@ -65,6 +73,10 @@ public static class DependencyChecker
         var online = true;
         try
         {
+#if DEBUG
+            if (DebugOffline) throw new InvalidOperationException("调试：只做本地检查");
+#endif
+            if (!Settings.Current.AllowOnlineModLookup) throw new LookupDisabledException();
             var hashes = await Task.Run(() =>
             {
                 var map = new Dictionary<ModEntry, string>();
@@ -84,6 +96,11 @@ public static class DependencyChecker
             }
         }
         catch (OperationCanceledException) { throw; }
+        catch (LookupDisabledException)
+        {
+            // 用户关闭了联网识别：只用模组文件里声明的前置，缺失的仍按模组 ID 查找下载（不发送任何哈希）
+            Log.Info("已关闭联网识别模组，前置检查只使用模组文件里的声明");
+        }
         catch (Exception ex)
         {
             online = false;
@@ -103,7 +120,8 @@ public static class DependencyChecker
         var disabledByProject = new Dictionary<string, ModEntry>();
         foreach (var m in mods.Where(m => !m.Enabled))
         {
-            foreach (var id in m.ModIds) disabledById.TryAdd(id, m);
+            // 只按模组自己的 ID 建议启用：前置只是内嵌在别的模组里时，不应该为它启用一整个无关的模组
+            foreach (var id in m.OwnIds) disabledById.TryAdd(id, m);
             if (projectOf.TryGetValue(m, out var pid)) disabledByProject.TryAdd(pid, m);
         }
 

@@ -45,6 +45,12 @@ public sealed class LauncherSettings
     /// <summary>启动前检查模组前置是否齐全</summary>
     public bool CheckDependencies { get; set; } = true;
 
+    /// <summary>
+    /// 联网识别模组：把模组文件的 SHA1 哈希发给资源平台，用于检查更新、查找前置和替换旧版本。
+    /// 关闭后不会发送任何模组哈希
+    /// </summary>
+    public bool AllowOnlineModLookup { get; set; } = true;
+
     /// <summary>启动时检查 GitHub 上有没有新版本</summary>
     public bool AutoCheckUpdate { get; set; } = true;
 

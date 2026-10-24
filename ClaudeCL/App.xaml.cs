@@ -185,6 +185,33 @@ public partial class App : Application
             });
             return;
         }
+        if (a.Length >= 4 && a[0] == "--deps-report")
+        {
+            // 调试：只读地检查前置（不联网、不处理），用于验证本地判断
+            Settings.ReadOnly = true;
+            Settings.Current.GameDir = a[1];
+            Settings.Current.IsolateVersions = true;
+            // --no-lookup：联网，但关闭“联网识别模组”，验证不会发送哈希
+            var noLookup = a.Contains("--no-lookup");
+            DependencyChecker.DebugOffline = !noLookup;
+            if (noLookup) Settings.Current.AllowOnlineModLookup = false;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var lines = new System.Collections.Generic.List<string>();
+                try
+                {
+                    var r = await DependencyChecker.CheckAsync(VersionStore.Load(a[1], a[2]), default);
+                    lines.Add($"需要启用 {r.ToEnable.Count}，缺失 {r.Unresolved.Count}（离线检查，缺失的不会去联网查找）");
+                    foreach (var (m, by) in r.ToEnable) lines.Add($"  启用 {m.Name}（{m.FileName}）← {by}");
+                    foreach (var u in r.Unresolved) lines.Add($"  缺失 {u.Id} ← {u.RequiredBy}");
+                }
+                catch (Exception ex) { lines.Add("失败：" + ex); }
+                System.IO.File.WriteAllLines(a[3], lines, new System.Text.UTF8Encoding(false));
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--deps-test")
         {
             // 调试：检查前置 → 一键处理 → 再检查一次

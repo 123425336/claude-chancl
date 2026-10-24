@@ -261,7 +261,7 @@ public partial class ResourcesPage : UserControl, IPage
             // 同一个模组的其他版本（装新版本后移到回收站，避免两个版本同时加载）
             var oldFiles = new List<string>();
             var present = new HashSet<string>();
-            if (type == "mod" && local.Count > 0)
+            if (type == "mod" && local.Count > 0 && Settings.Current.AllowOnlineModLookup)
             {
                 try
                 {
