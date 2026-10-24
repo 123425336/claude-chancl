@@ -19,6 +19,7 @@ public partial class VersionDetailPage : UserControl, IPage
     private InstalledVersion _version;
     private List<ModEntry> _mods = [];
     private CancellationTokenSource? _swCts;
+    private CancellationTokenSource? _updateCts;
     private bool _loaderTabLoaded;
 
     public VersionDetailPage(InstalledVersion version)
@@ -28,6 +29,9 @@ public partial class VersionDetailPage : UserControl, IPage
     }
 
     private string RunDir => _version.RunDir(Settings.Current.GameDir);
+
+    /// <summary>当前列出的模组（调试截图用）</summary>
+    internal IReadOnlyList<ModEntry> Mods => _mods;
     private string ModsDir => Path.Combine(RunDir, "mods");
 
     public void OnShown()
@@ -83,6 +87,109 @@ public partial class VersionDetailPage : UserControl, IPage
         }
         ModsLoading.Visibility = Visibility.Collapsed;
         ApplyFilter();
+        _ = CheckUpdatesAsync();
+    }
+
+    // ---------------- 模组更新 ----------------
+
+    /// <summary>
+    /// 后台检查所有模组有没有新版本
+    /// </summary>
+    private async Task CheckUpdatesAsync()
+    {
+        _updateCts?.Cancel();
+        _updateCts = new CancellationTokenSource();
+        var ct = _updateCts.Token;
+        UpdateAllButton.Visibility = Visibility.Collapsed;
+        UpdateStatus.Text = "";
+        if (_mods.Count == 0 || _version.ModLoaderName is null) return;
+        UpdateChecking.Visibility = Visibility.Visible;
+        try
+        {
+            var count = await ModUpdater.CheckAsync(_mods, _version, ct);
+            if (ct.IsCancellationRequested) return;
+            var known = _mods.Count(m => m.ProjectId is not null);
+            UpdateStatus.Text = count > 0 ? $"{count} 个模组有新版" : $"都是最新的（识别了 {known} / {_mods.Count} 个）";
+            UpdateStatus.ToolTip = known < _mods.Count ? "只能识别在资源平台上发布的模组，其余的无法检查更新" : null;
+            UpdateAllButton.Visibility = count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Log.Warn("检查模组更新失败：" + ex.Message);
+            if (!ct.IsCancellationRequested) UpdateStatus.Text = "检查更新失败，稍后再试";
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested) UpdateChecking.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// 单个模组的“更新”：跳到资源中心查看新版并下载
+    /// </summary>
+    private void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not ModEntry { Update: not null } mod) return;
+        var w = MainWindow.Instance!;
+        AppState.Select(_version);
+        w.Navigate("resources");
+        w.GetPage<ResourcesPage>("resources")?.ShowUpdate(_version, mod, _mods);
+    }
+
+    private async void UpdateAll_Click(object sender, RoutedEventArgs e)
+    {
+        var w = MainWindow.Instance!;
+        var list = _mods.Where(m => m.HasUpdate).ToList();
+        if (list.Count == 0) return;
+        if (GameLauncher.Running?.Version.Id == _version.Id)
+        {
+            w.Toast("请先关闭正在运行的这个版本，模组文件被占用时无法替换", ToastKind.Error);
+            return;
+        }
+        var names = string.Join("\n", list.Take(12).Select(m => $"· {m.Name}：{m.Version} → {m.Update!.Latest.VersionName}"));
+        if (list.Count > 12) names += $"\n…… 还有 {list.Count - 12} 个";
+        if (!await w.Confirm($"更新 {list.Count} 个模组？", names + "\n\n旧文件会移到回收站，需要时可以找回。", "全部更新", "取消")) return;
+
+        using var cts = new CancellationTokenSource();
+        var dialog = ProgressDialog.Show("正在更新模组", cts);
+        var ok = 0;
+        var failed = new List<string>();
+        var deps = new List<string>();
+        try
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                var mod = list[i];
+                dialog.Report(new StageProgress($"更新 {mod.Name}", (double)i / list.Count, $"{i + 1} / {list.Count}"));
+                try
+                {
+                    deps.AddRange(await ModUpdater.ApplyAsync(mod, _version, _mods, cts.Token));
+                    ok++;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    Log.Warn($"更新 {mod.Name} 失败：{ex.Message}");
+                    failed.Add(mod.Name);
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            dialog.Close();
+        }
+        var msg = $"更新了 {ok} 个模组" + (deps.Count > 0 ? $"，补装了 {deps.Count} 个前置" : "") + (failed.Count > 0 ? $"，{failed.Count} 个失败：{string.Join("、", failed.Take(3))}" : "");
+        w.Toast(msg, failed.Count > 0 ? ToastKind.Error : ToastKind.Success);
+        if (deps.Count > 0) await LoadModsAsync();
+        else
+        {
+            ApplyFilter();
+            var left = _mods.Count(m => m.HasUpdate);
+            UpdateStatus.Text = left > 0 ? $"{left} 个模组有新版" : "都是最新的";
+            UpdateAllButton.Visibility = left > 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void Filter_Changed(object sender, RoutedEventArgs e)

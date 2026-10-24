@@ -99,6 +99,54 @@ public partial class App : Application
             Shutdown(0);
             return;
         }
+        if (a.Length >= 3 && a[0] == "--scan-test")
+        {
+            // 调试：扫描指定游戏目录，输出识别结果和跳过原因
+            var found = VersionStore.Scan(a[1]);
+            var report = new System.Collections.Generic.List<string> { $"识别 {found.Count} 个版本（按显示顺序）：" };
+            foreach (var v in found)
+                report.Add($"  {v.Id} → {v.Summary}｜游戏版本 {v.GameVersion}｜本体 {(v.Json is null ? "-" : System.IO.Path.GetFileName(Installer.JarPath(a[1], v.Json, v.Id)))}");
+            report.Add($"跳过 {VersionStore.LastSkipped.Count} 个：");
+            foreach (var (name, reason) in VersionStore.LastSkipped) report.Add($"  {name} → {reason}");
+            System.IO.File.WriteAllLines(a[2], report, new System.Text.UTF8Encoding(false));
+            Shutdown(0);
+            return;
+        }
+        if (a.Length >= 4 && a[0] == "--update-test")
+        {
+            // 调试：检查指定版本的模组更新并全部执行，输出前后对比
+            Settings.ReadOnly = true;
+            Settings.Current.GameDir = a[1];
+            Settings.Current.IsolateVersions = true;
+            _ = Task.Run(async () =>
+            {
+                var report = new System.Collections.Generic.List<string>();
+                try
+                {
+                    var v = VersionStore.Load(a[1], a[2]);
+                    var mods = ModScanner.Scan(System.IO.Path.Combine(v.Dir, "mods"));
+                    var count = await ModUpdater.CheckAsync(mods, v, default);
+                    report.Add($"版本 {v.Summary}，{mods.Count} 个模组，有新版 {count} 个：");
+                    foreach (var m in mods)
+                        report.Add($"  {m.Name}（{m.FileName}）{(m.Enabled ? "" : "[已停用]")} → " +
+                                   (m.ProjectId is null ? "无法识别" : m.Update is null ? "已是最新" : $"{m.Update.CurrentVersion} → {m.Update.Latest.VersionName}"));
+                    foreach (var m in mods.Where(m => m.HasUpdate).ToList())
+                    {
+                        var deps = await ModUpdater.ApplyAsync(m, v, mods, default);
+                        report.Add($"已更新：{m.Name} → {m.FileName}{(deps.Count > 0 ? "，补装前置 " + string.Join("、", deps) : "")}");
+                    }
+                    report.Add("更新后 mods 文件夹：");
+                    report.AddRange(System.IO.Directory.GetFiles(System.IO.Path.Combine(v.Dir, "mods")).Select(f => "  " + System.IO.Path.GetFileName(f)));
+                    var again = ModScanner.Scan(System.IO.Path.Combine(v.Dir, "mods"));
+                    report.Add($"再次检查，还有新版 {await ModUpdater.CheckAsync(again, v, default)} 个");
+                }
+                catch (Exception ex) { report.Add("失败：" + ex); }
+                System.IO.File.WriteAllLines(a[3], report, new System.Text.UTF8Encoding(false));
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--selftest")
         {
             Settings.ReadOnly = true;

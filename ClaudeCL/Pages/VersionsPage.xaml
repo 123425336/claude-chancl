@@ -15,7 +15,8 @@
         </StackPanel>
 
         <!-- 游戏目录 -->
-        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="16,12" Margin="0,0,8,14">
+        <StackPanel Grid.Row="1" Margin="0,0,8,14">
+        <Border Style="{StaticResource Card}" Padding="16,12">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="更换" Padding="14,6" Margin="8,0,0,0" Click="ChangeDir_Click"/>
                 <Button DockPanel.Dock="Right" Content="打开" Padding="14,6" Margin="8,0,0,0" Click="OpenDir_Click"/>
@@ -27,6 +28,10 @@
                 </StackPanel>
             </DockPanel>
         </Border>
+        <!-- 有文件夹没被识别为版本时的提示 -->
+        <Button x:Name="SkippedHint" Style="{StaticResource Btn.Link}" Margin="6,10,0,0" HorizontalAlignment="Left"
+                Visibility="Collapsed" Click="Skipped_Click"/>
+        </StackPanel>
 
         <Grid Grid.Row="2">
             <ScrollViewer VerticalScrollBarVisibility="Auto">

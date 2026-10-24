@@ -121,9 +121,18 @@ public partial class MainWindow : Window
         {
             ShowVersionDetail(first);
             // 输入一点搜索词，确认清空按钮的样子
-            if (PageHost.Content is VersionDetailPage searching) searching.SearchBox.Text = "fo";
-            await Task.Delay(1500);
+            // 等模组更新检查完成
+            await Task.Delay(7000);
             Save(System.IO.Path.Combine(dir, "light-detail-mods.png"));
+            if (PageHost.Content is VersionDetailPage withUpdates && withUpdates.Mods.FirstOrDefault(m => m.HasUpdate) is { } outdated)
+            {
+                Navigate("resources");
+                GetPage<ResourcesPage>("resources")?.ShowUpdate(first, outdated, withUpdates.Mods);
+                await Task.Delay(6000);
+                Save(System.IO.Path.Combine(dir, "light-update-banner.png"));
+                ShowVersionDetail(first);
+                await Task.Delay(1500);
+            }
             if (PageHost.Content is VersionDetailPage detail)
             {
                 detail.LoaderTab.IsChecked = true;

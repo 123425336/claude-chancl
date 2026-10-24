@@ -20,6 +20,8 @@ public sealed class InstalledVersion
     public string? Error { get; init; }
     public LoaderKind Loader { get; init; }
     public string LoaderVersion { get; init; } = "";
+    /// <summary>除了加载器之外，还装了 OptiFine</summary>
+    public bool HasOptiFine { get; init; }
     public string GameVersion { get; init; } = "";
     public string Type { get; init; } = "release";
     public DateTime ModifiedAt { get; init; }
@@ -38,7 +40,7 @@ public sealed class InstalledVersion
         LoaderKind.NeoForge => $"NeoForge {LoaderVersion}",
         LoaderKind.OptiFine => "OptiFine",
         _ => "未知",
-    };
+    } + (HasOptiFine && Loader != LoaderKind.OptiFine ? " · OptiFine" : "");
 
     public string Summary => IsValid ? $"{GameVersion} · {LoaderText}" : $"已损坏：{Error}";
 
@@ -60,18 +62,79 @@ public static class VersionStore
 {
     public static string VersionsDir(string gameDir) => Path.Combine(gameDir, "versions");
 
+    /// <summary>上次扫描时没有识别为游戏版本的文件夹及原因</summary>
+    public static IReadOnlyList<(string Name, string Reason)> LastSkipped { get; private set; } = [];
+
     public static List<InstalledVersion> Scan(string gameDir)
     {
         var result = new List<InstalledVersion>();
+        var skipped = new List<(string Name, string Reason)>();
         var dir = VersionsDir(gameDir);
-        if (!Directory.Exists(dir)) return result;
+        if (!Directory.Exists(dir))
+        {
+            LastSkipped = skipped;
+            return result;
+        }
         foreach (var sub in Directory.EnumerateDirectories(dir))
         {
             var id = Path.GetFileName(sub);
-            if (!File.Exists(Path.Combine(sub, id + ".json"))) continue;
-            result.Add(Load(gameDir, id));
+            try
+            {
+                if (FindJson(sub, id) is null)
+                {
+                    var files = Directory.EnumerateFiles(sub).Select(Path.GetFileName).Take(6).ToList();
+                    skipped.Add((id, files.Count == 0
+                        ? "文件夹是空的"
+                        : $"没有找到版本信息文件（应为 {id}.json），文件夹里有：{string.Join("、", files)}"));
+                    continue;
+                }
+                result.Add(Load(gameDir, id));
+            }
+            catch (Exception ex)
+            {
+                // 单个文件夹出问题不影响其他版本
+                skipped.Add((id, $"读取失败：{ex.Message}"));
+            }
         }
-        return result.OrderByDescending(v => v.ModifiedAt).ToList();
+        LastSkipped = skipped;
+        Log.Info($"扫描版本：{dir}，识别 {result.Count} 个" +
+                 (skipped.Count == 0 ? "" : $"，跳过 {skipped.Count} 个：\n  " + string.Join("\n  ", skipped.Select(s => $"{s.Name} → {s.Reason}"))));
+        // 和常见启动器一样按游戏版本从新到旧排列，同一游戏版本按名称排
+        return result
+            .OrderByDescending(v => VersionSortKey(v.GameVersion))
+            .ThenBy(v => v.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 版本号排序键：正式版按数字比较，快照等无法比较的排在最后
+    /// </summary>
+    private static string VersionSortKey(string gameVersion) =>
+        System.Text.RegularExpressions.Regex.IsMatch(gameVersion, @"^\d+(\.\d+)+") ? ForgeInstaller.SortKey(gameVersion.Split('-', ' ')[0]) : "";
+
+    /// <summary>
+    /// 找到版本文件夹里的版本信息文件：优先“文件夹名.json”，否则在文件夹里找一个内容像版本信息的 json
+    /// </summary>
+    public static string? FindJson(string dir, string id)
+    {
+        var exact = Path.Combine(dir, id + ".json");
+        if (File.Exists(exact)) return exact;
+        if (!Directory.Exists(dir)) return null;
+        foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+        {
+            try
+            {
+                if (new FileInfo(file).Length > 4 * 1024 * 1024) continue;
+                if (ReadJson(file) is { } obj && (obj["mainClass"] is not null || obj["inheritsFrom"] is not null) &&
+                    (obj["libraries"] is not null || obj["inheritsFrom"] is not null))
+                {
+                    Log.Info($"版本 {id} 的信息文件名与文件夹不一致，使用 {Path.GetFileName(file)}");
+                    return file;
+                }
+            }
+            catch { /* 不是版本信息文件 */ }
+        }
+        return null;
     }
 
     public static InstalledVersion Load(string gameDir, string id)
@@ -82,12 +145,13 @@ public static class VersionStore
         {
             var json = LoadMerged(gameDir, id, 0);
             var (loader, loaderVer) = DetectLoader(json);
+            var hasOptiFine = json["libraries"]?.AsArray().Any(l => ((string?)l?["name"])?.StartsWith("optifine:OptiFine:") == true) == true;
             var gameVer = (string?)json["clientVersion"]
                           ?? (string?)json["_inheritsFrom"]
                           ?? GuessGameVersion(json, id);
             return new InstalledVersion
             {
-                Id = id, Dir = dir, Json = json, Loader = loader, LoaderVersion = loaderVer,
+                Id = id, Dir = dir, Json = json, Loader = loader, LoaderVersion = loaderVer, HasOptiFine = hasOptiFine,
                 GameVersion = gameVer, Type = (string?)json["type"] ?? "release", ModifiedAt = modified,
             };
         }
@@ -97,8 +161,15 @@ public static class VersionStore
         }
     }
 
+    // 宽松解析：允许注释和多余的逗号，部分手工修改过的版本文件会有这些
+    private static readonly System.Text.Json.JsonDocumentOptions LooseJson = new()
+    {
+        AllowTrailingCommas = true,
+        CommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+    };
+
     public static JsonObject ReadJson(string path) =>
-        JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8)) as JsonObject
+        JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8), null, LooseJson) as JsonObject
         ?? throw new InvalidDataException("版本 JSON 格式错误");
 
     /// <summary>
@@ -107,9 +178,12 @@ public static class VersionStore
     private static JsonObject LoadMerged(string gameDir, string id, int depth)
     {
         if (depth > 8) throw new InvalidDataException("版本继承层级过深");
-        var path = Path.Combine(VersionsDir(gameDir), id, id + ".json");
-        if (!File.Exists(path)) throw new FileNotFoundException($"缺少版本 {id} 的 JSON 文件");
+        var path = FindJson(Path.Combine(VersionsDir(gameDir), id), id)
+                   ?? throw new FileNotFoundException(depth == 0 ? $"缺少版本 {id} 的 JSON 文件" : $"依赖的原版 {id} 不存在（需要先安装或补全 {id}）");
         var child = ReadJson(path);
+        // 记下实际的文件名：和文件夹名不一致时，游戏本体 jar 往往也沿用这个名字
+        var jsonName = Path.GetFileNameWithoutExtension(path);
+        if (depth == 0 && !jsonName.Equals(id, StringComparison.OrdinalIgnoreCase)) child["_jsonName"] = jsonName;
         var parentId = (string?)child["inheritsFrom"];
         if (string.IsNullOrEmpty(parentId)) return child;
 
@@ -196,8 +270,10 @@ public static class VersionStore
                 if (v.Contains('-')) v = v[..v.IndexOf('-')];
                 return (LoaderKind.Forge, v);
             }
-            if (name.StartsWith("optifine:OptiFine:")) return (LoaderKind.OptiFine, ver);
         }
+        // 没有其他加载器时，才把 OptiFine 当作主要的加载器
+        if (json["libraries"]?.AsArray().FirstOrDefault(l => ((string?)l?["name"])?.StartsWith("optifine:OptiFine:") == true) is { } of)
+            return (LoaderKind.OptiFine, ((string)of["name"]!).Split(':')[2]);
         var main = (string?)json["mainClass"] ?? "";
         if (main.Contains("fabric", StringComparison.OrdinalIgnoreCase)) return (LoaderKind.Fabric, "");
         if (main.Contains("quilt", StringComparison.OrdinalIgnoreCase)) return (LoaderKind.Quilt, "");
@@ -206,12 +282,31 @@ public static class VersionStore
         return (LoaderKind.Vanilla, "");
     }
 
+    /// <summary>
+    /// 推断游戏版本：合并成单个文件的整合版本没有继承信息，需要从参数、库名或版本名里找
+    /// </summary>
     private static string GuessGameVersion(JsonObject json, string id)
     {
-        // 原版的 jar 名就是游戏版本
+        // 1. 新版 Forge / NeoForge 的参数里写着游戏版本
+        if (json["arguments"]?["game"] is JsonArray game)
+            for (var i = 0; i < game.Count - 1; i++)
+                if (game[i] is JsonValue v && v.TryGetValue<string>(out var s) && s == "--fml.mcVersion")
+                    return (string?)game[i + 1] ?? id;
+        // 2. 加载器的库名里带着游戏版本
+        foreach (var lib in json["libraries"]?.AsArray() ?? [])
+        {
+            var parts = ((string?)lib?["name"] ?? "").Split(':');
+            if (parts.Length < 3) continue;
+            if (parts[0] is "net.fabricmc" or "org.quiltmc" && parts[1] is "intermediary" or "hashed") return parts[2];
+            if (parts[0] is "net.minecraftforge" or "net.neoforged" && parts[1] == "forge" && parts[2].Contains('-')) return parts[2][..parts[2].IndexOf('-')];
+            if (parts[0] == "optifine" && parts[1] == "OptiFine" && parts[2].Contains('_')) return parts[2][..parts[2].IndexOf('_')];
+        }
+        // 3. 原版的 jar 名就是游戏版本
         var jar = (string?)json["jar"];
         if (!string.IsNullOrEmpty(jar)) return jar;
-        return id;
+        // 4. 版本名开头的版本号，例如 1.20.1-Forge_47.4.16
+        var m = System.Text.RegularExpressions.Regex.Match(id, @"^\d+\.\d+(\.\d+)?");
+        return m.Success ? m.Value : id;
     }
 
     /// <summary>

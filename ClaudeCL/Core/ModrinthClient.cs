@@ -27,6 +27,12 @@ public sealed record ResourceFile(string VersionName, string FileName, string Ur
     public string Summary => $"{string.Join(" / ", Loaders)} · {string.Join(", ", GameVersions.Take(3))}{(GameVersions.Length > 3 ? " …" : "")}";
 }
 
+/// <summary>一个模组的可用更新</summary>
+public sealed record ModUpdateInfo(string ProjectId, string CurrentVersion, ResourceFile Latest, string Changelog);
+
+/// <summary>批量检查的结果：识别出的模组（SHA1 → 资源 ID）与其中有新版的</summary>
+public sealed record ModCheckResult(Dictionary<string, string> ProjectIds, Dictionary<string, ModUpdateInfo> Updates);
+
 /// <summary>
 /// 社区资源平台的搜索与下载（Mod、资源包、光影）
 /// </summary>
@@ -61,23 +67,93 @@ public static class ModrinthClient
         var json = await Net.GetJsonDirectAsync(url, ct).ConfigureAwait(false);
         var result = new List<ResourceFile>();
         foreach (var v in json.AsArray())
-        {
-            if (v is null) continue;
-            var files = v["files"]?.AsArray();
-            var file = files?.FirstOrDefault(f => (bool?)f?["primary"] == true) ?? files?.FirstOrDefault();
-            if (file is null) continue;
-            result.Add(new ResourceFile(
-                (string?)v["version_number"] ?? (string?)v["name"] ?? "", (string)file["filename"]!, (string)file["url"]!,
-                (string?)file["hashes"]?["sha1"], (long?)file["size"] ?? -1,
-                v["game_versions"]?.AsArray().Select(g => (string?)g ?? "").ToArray() ?? [],
-                v["loaders"]?.AsArray().Select(g => (string?)g ?? "").ToArray() ?? [],
-                DateTime.TryParse((string?)v["date_published"], out var t) ? t : DateTime.MinValue,
-                // 必需的前置资源
-                v["dependencies"]?.AsArray()
-                    .Where(d => (string?)d?["dependency_type"] == "required" && (string?)d?["project_id"] is { Length: > 0 })
-                    .Select(d => (string)d!["project_id"]!).ToArray() ?? []));
-        }
+            if (ParseVersion(v) is { } file) result.Add(file);
         return result;
+    }
+
+    /// <summary>
+    /// 把接口返回的一个版本对象转换为可下载的文件信息
+    /// </summary>
+    private static ResourceFile? ParseVersion(JsonNode? v)
+    {
+        if (v is null) return null;
+        var files = v["files"]?.AsArray();
+        var file = files?.FirstOrDefault(f => (bool?)f?["primary"] == true) ?? files?.FirstOrDefault();
+        if (file is null) return null;
+        return new ResourceFile(
+            (string?)v["version_number"] ?? (string?)v["name"] ?? "", (string)file["filename"]!, (string)file["url"]!,
+            (string?)file["hashes"]?["sha1"], (long?)file["size"] ?? -1,
+            v["game_versions"]?.AsArray().Select(g => (string?)g ?? "").ToArray() ?? [],
+            v["loaders"]?.AsArray().Select(g => (string?)g ?? "").ToArray() ?? [],
+            DateTime.TryParse((string?)v["date_published"], out var t) ? t : DateTime.MinValue,
+            // 必需的前置资源
+            v["dependencies"]?.AsArray()
+                .Where(d => (string?)d?["dependency_type"] == "required" && (string?)d?["project_id"] is { Length: > 0 })
+                .Select(d => (string)d!["project_id"]!).ToArray() ?? []);
+    }
+
+    private static async Task<JsonNode> PostJsonAsync(string url, JsonObject body, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(30));
+        using var resp = await Net.Client.PostAsync(url,
+            new System.Net.Http.StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json"), cts.Token).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        return JsonNode.Parse(await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false)) ?? new JsonObject();
+    }
+
+    /// <summary>
+    /// 查询单个资源的基本信息（名称、图标、简介）
+    /// </summary>
+    public static async Task<ResourceProject> GetProjectAsync(string projectId, CancellationToken ct)
+    {
+        var p = await Net.GetJsonDirectAsync($"{Api}/project/{projectId}", ct).ConfigureAwait(false);
+        return new ResourceProject((string)p["id"]!, (string?)p["slug"] ?? "", (string?)p["title"] ?? "", (string?)p["description"] ?? "",
+            "", (string?)p["icon_url"], (long?)p["downloads"] ?? 0, [], (string?)p["project_type"] ?? "mod");
+    }
+
+    /// <summary>
+    /// 按文件的 SHA1 批量检查模组是否有新版本（只能识别在这个平台上发布的模组）。
+    /// 返回：文件 SHA1 → 更新信息；已是最新或无法识别的不在结果里。
+    /// </summary>
+    public static async Task<ModCheckResult> CheckUpdatesAsync(
+        IReadOnlyCollection<string> sha1s, string gameVersion, string loader, CancellationToken ct)
+    {
+        var result = new Dictionary<string, ModUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+        var known = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (sha1s.Count == 0) return new(known, result);
+        var hashes = new JsonArray(sha1s.Select(h => (JsonNode)JsonValue.Create(h)!).ToArray());
+
+        // 1. 当前文件对应的是哪个模组的哪个版本
+        var current = (await PostJsonAsync($"{Api}/version_files",
+            new JsonObject { ["hashes"] = hashes.DeepClone(), ["algorithm"] = "sha1" }, ct).ConfigureAwait(false)).AsObject();
+        foreach (var (hash, cur) in current)
+            if ((string?)cur?["project_id"] is { } pid) known[hash] = pid;
+        if (current.Count == 0) return new(known, result);
+
+        // 2. 这些模组在当前游戏版本与加载器下的最新版本
+        var latest = (await PostJsonAsync($"{Api}/version_files/update", new JsonObject
+        {
+            ["hashes"] = new JsonArray(current.Select(kv => (JsonNode)JsonValue.Create(kv.Key)!).ToArray()),
+            ["algorithm"] = "sha1",
+            ["loaders"] = new JsonArray(loader),
+            ["game_versions"] = new JsonArray(gameVersion),
+        }, ct).ConfigureAwait(false)).AsObject();
+
+        foreach (var (hash, cur) in current)
+        {
+            if (cur is null || latest[hash] is not { } newest) continue;
+            if ((string?)newest["id"] == (string?)cur["id"]) continue;
+            // 最新版的文件里就包含当前文件，说明已经是最新
+            if (newest["files"]?.AsArray().Any(f => string.Equals((string?)f?["hashes"]?["sha1"], hash, StringComparison.OrdinalIgnoreCase)) == true) continue;
+            var curDate = DateTime.TryParse((string?)cur["date_published"], out var cd) ? cd : DateTime.MinValue;
+            var file = ParseVersion(newest);
+            if (file is null || file.Published <= curDate) continue;
+            var changelog = ((string?)newest["changelog"] ?? "").Trim();
+            result[hash] = new ModUpdateInfo((string)cur["project_id"]!, (string?)cur["version_number"] ?? "", file,
+                changelog.Length > 1500 ? changelog[..1500] + "……" : changelog);
+        }
+        return new(known, result);
     }
 
     /// <summary>

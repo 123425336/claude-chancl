@@ -47,6 +47,9 @@ public partial class VersionsPage : UserControl, IPage
         var items = AppState.Versions.Select(v => new VersionItem { Version = v, IsCurrent = v.Id == current }).ToList();
         List.ItemsSource = items;
         EmptyPanel.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var skipped = VersionStore.LastSkipped.Count;
+        SkippedHint.Visibility = skipped > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SkippedHint.Content = $"有 {skipped} 个文件夹没有识别为游戏版本，点这里查看原因";
     }
 
     private static InstalledVersion? From(object sender) => (sender as FrameworkElement)?.Tag is VersionItem i ? i.Version : null;
@@ -128,6 +131,36 @@ public partial class VersionsPage : UserControl, IPage
     private void Rescan_Click(object sender, RoutedEventArgs e) => _ = AppState.RefreshVersionsAsync();
 
     private void GoDownload_Click(object sender, RoutedEventArgs e) => MainWindow.Instance!.Navigate("download");
+
+    /// <summary>
+    /// 列出没有识别为版本的文件夹和原因，方便排查“少了一个版本”
+    /// </summary>
+    private void Skipped_Click(object sender, RoutedEventArgs e)
+    {
+        var w = MainWindow.Instance!;
+        var body = new StackPanel { Width = 600 };
+        body.Children.Add(new TextBlock { Text = "这些文件夹没有识别为游戏版本", Style = (Style)w.FindResource("T.H2"), FontSize = 20 });
+        body.Children.Add(new TextBlock
+        {
+            Text = "每个版本文件夹里需要有一个版本信息文件（通常是“文件夹名.json”）。如果是别的启动器装了一半或者删了一半，就会出现这种情况。",
+            Style = (Style)w.FindResource("T.Soft"), Margin = new Thickness(0, 8, 0, 12),
+        });
+        var text = string.Join(Environment.NewLine + Environment.NewLine, VersionStore.LastSkipped.Select(s => $"{s.Name}\n  {s.Reason}"));
+        body.Children.Add(new TextBox { Text = text, Style = (Style)w.FindResource("TextBox.Code"), MaxHeight = 300 });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+        var copy = new Button { Content = "复制", Margin = new Thickness(0, 0, 10, 0) };
+        copy.Click += (_, _) => { try { Clipboard.SetText(text); w.Toast("已复制", ToastKind.Success); } catch { } };
+        var open = new Button { Content = "打开 versions 文件夹", Margin = new Thickness(0, 0, 10, 0) };
+        open.Click += (_, _) => Shell.Open(VersionStore.VersionsDir(Settings.Current.GameDir));
+        var close = new Button { Content = "知道了", Style = (Style)w.FindResource("Btn.Primary"), MinWidth = 84 };
+        buttons.Children.Add(copy);
+        buttons.Children.Add(open);
+        buttons.Children.Add(close);
+        body.Children.Add(buttons);
+        var handle = w.ShowDialog(body, 680);
+        close.Click += (_, _) => handle.Close();
+        handle.OnEscape = handle.Close;
+    }
 
     // ---------------- 详情（模组与加载器） ----------------
 

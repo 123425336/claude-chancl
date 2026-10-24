@@ -37,6 +37,14 @@
             </Grid.RowDefinitions>
             <DockPanel Margin="0,0,8,12">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <!-- 模组更新检查的状态 -->
+                    <StackPanel x:Name="UpdateChecking" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0" Visibility="Collapsed">
+                        <c:SparkLoader Width="18" Height="18"/>
+                        <TextBlock Text="正在检查模组更新……" Style="{StaticResource T.Caption}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="UpdateStatus" Style="{StaticResource T.Caption}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Button x:Name="UpdateAllButton" Content="全部更新" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE896;" Padding="12,7"
+                            Margin="0,0,6,0" Visibility="Collapsed" Click="UpdateAll_Click"/>
                     <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE72C;" ToolTip="刷新" Click="Refresh_Click"/>
                     <Button Content="添加模组" c:Ui.Icon="&#xE710;" Padding="12,7" Margin="6,0,0,0" Click="AddMods_Click"/>
                 </StackPanel>
@@ -74,6 +82,14 @@
                                 <TextBlock Text="{Binding FileName}" Style="{StaticResource T.Caption}" FontSize="11" Margin="0,2,0,0"/>
                             </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 有新版时显示 -->
+                                <StackPanel x:Name="UpdateBox" Orientation="Horizontal" Margin="0,0,14,0" Visibility="Collapsed">
+                                    <Border Style="{StaticResource Pill}" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding UpdateText}" FontSize="11.5" Foreground="{DynamicResource AccentBrush}"/>
+                                    </Border>
+                                    <Button Content="更新" Style="{StaticResource Btn.Primary}" Padding="12,5" Tag="{Binding}" Click="Update_Click"
+                                            ToolTip="去资源中心查看新版并下载"/>
+                                </StackPanel>
                                 <CheckBox IsChecked="{Binding Enabled, Mode=OneWay}" Click="Toggle_Click" Tag="{Binding}" ToolTip="启用 / 停用"/>
                                 <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE74D;" ToolTip="移到回收站" Margin="8,0,0,0"
                                         Tag="{Binding}" Click="Delete_Click" c:Ui.HoverBackground="{DynamicResource DangerSoftBrush}"/>
@@ -82,6 +98,9 @@
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Enabled}" Value="False">
                                 <Setter TargetName="Row" Property="Opacity" Value="0.5"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding HasUpdate}" Value="True">
+                                <Setter TargetName="UpdateBox" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

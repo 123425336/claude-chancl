@@ -40,6 +40,29 @@ public sealed class ModEntry : INotifyPropertyChanged
     public ImageSource? Icon { get; set; }
     public long Size { get; set; }
 
+    /// <summary>在资源平台上识别出的资源 ID（未识别为空）</summary>
+    public string? ProjectId { get; set; }
+
+    private ModUpdateInfo? _update;
+
+    /// <summary>可用的新版本（没有为空）</summary>
+    public ModUpdateInfo? Update
+    {
+        get => _update;
+        set
+        {
+            _update = value;
+            PropertyChanged?.Invoke(this, new(nameof(Update)));
+            PropertyChanged?.Invoke(this, new(nameof(HasUpdate)));
+            PropertyChanged?.Invoke(this, new(nameof(UpdateText)));
+        }
+    }
+
+    public bool HasUpdate => _update is not null;
+    public string UpdateText => _update is null ? "" : $"新版 {_update.Latest.VersionName}";
+
+    public void NotifyChanged(string name) => PropertyChanged?.Invoke(this, new(name));
+
     public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name[..1].ToUpperInvariant();
     public string Subtitle => string.Join(" · ", new[] { Version, Authors, Installer.FormatSize(Size) }.Where(s => !string.IsNullOrWhiteSpace(s)));
 

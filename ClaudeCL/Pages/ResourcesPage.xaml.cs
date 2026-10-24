@@ -126,6 +126,85 @@ public partial class ResourcesPage : UserControl, IPage
         }
     }
 
+    // ---------------- 模组更新 ----------------
+
+    private (InstalledVersion Version, ModEntry Mod, IReadOnlyCollection<ModEntry> FolderMods, string Slug)? _pending;
+
+    /// <summary>
+    /// 从模组管理页跳过来：显示这个模组的更新信息，并在下方列出这个模组
+    /// </summary>
+    public async void ShowUpdate(InstalledVersion version, ModEntry mod, IReadOnlyCollection<ModEntry> folderMods)
+    {
+        var info = mod.Update!;
+        _pending = (version, mod, folderMods, info.ProjectId);
+        RefreshTargets();
+        TargetBox.SelectedItem = AppState.Versions.FirstOrDefault(v => v.Id == version.Id && v.IsValid) ?? TargetBox.SelectedItem;
+        ModChip.IsChecked = true;
+        BannerTitle.Text = $"{mod.Name} 有新版本";
+        BannerCurrent.Text = $"当前 {info.CurrentVersion}";
+        BannerLatest.Text = $"最新 {info.Latest.VersionName}";
+        BannerFile.Text = $"{info.Latest.FileName} · {Installer.FormatSize(info.Latest.Size)} · 发布于 {info.Latest.Published:yyyy 年 M 月 d 日}";
+        BannerChangelog.Text = string.IsNullOrWhiteSpace(info.Changelog) ? "（作者没有写更新说明）" : info.Changelog;
+        BannerIcon.Source = mod.Icon;
+        BannerUpdateButton.IsEnabled = true;
+        BannerUpdateButton.Content = "更新并替换旧版本";
+        UpdateBanner.Visibility = Visibility.Visible;
+        try
+        {
+            // 补充平台上的名称与图标，并在下方搜索出这个模组
+            var project = await ModrinthClient.GetProjectAsync(info.ProjectId, CancellationToken.None);
+            if (_pending?.Mod != mod) return;
+            _pending = (version, mod, folderMods, string.IsNullOrEmpty(project.Slug) ? project.Id : project.Slug);
+            if (!string.IsNullOrEmpty(project.IconUrl)) BannerIcon.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(project.IconUrl));
+            SearchBox.Text = project.Title;
+            await SearchAsync(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("获取模组信息失败：" + ex.Message);
+        }
+    }
+
+    private async void BannerUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pending is not { } p) return;
+        var w = MainWindow.Instance!;
+        if (GameLauncher.Running?.Version.Id == p.Version.Id)
+        {
+            w.Toast("请先关闭正在运行的这个版本，模组文件被占用时无法替换", ToastKind.Error);
+            return;
+        }
+        BannerUpdateButton.IsEnabled = false;
+        BannerUpdateButton.Content = "更新中……";
+        try
+        {
+            var name = p.Mod.Name;
+            var latest = p.Mod.Update!.Latest.VersionName;
+            var deps = await ModUpdater.ApplyAsync(p.Mod, p.Version, p.FolderMods, CancellationToken.None);
+            w.Toast(deps.Count == 0 ? $"{name} 已更新到 {latest}" : $"{name} 已更新到 {latest}，还补装了 {deps.Count} 个前置", ToastKind.Success);
+            UpdateBanner.Visibility = Visibility.Collapsed;
+            _pending = null;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "更新模组失败");
+            w.Toast("更新失败：" + ex.Message, ToastKind.Error);
+            BannerUpdateButton.IsEnabled = true;
+            BannerUpdateButton.Content = "更新并替换旧版本";
+        }
+    }
+
+    private void BannerDetail_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pending is { } p) Shell.Open($"https://modrinth.com/mod/{p.Slug}");
+    }
+
+    private void BannerClose_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateBanner.Visibility = Visibility.Collapsed;
+        _pending = null;
+    }
+
     private void Detail_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: ResourceProject p })

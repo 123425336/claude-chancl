@@ -154,7 +154,14 @@ public static class Installer
     public static string JarPath(string gameDir, JsonObject json, string id)
     {
         var jar = (string?)json["jar"] ?? id;
-        return Path.Combine(VersionStore.VersionsDir(gameDir), jar, jar + ".jar");
+        var path = Path.Combine(VersionStore.VersionsDir(gameDir), jar, jar + ".jar");
+        // 文件夹被改过名时（例如切换加载器版本后），沿用版本信息文件名对应的 jar，避免重复下载
+        if (!File.Exists(path) && json["jar"] is null && (string?)json["_jsonName"] is { } jsonName)
+        {
+            var old = Path.Combine(VersionStore.VersionsDir(gameDir), id, jsonName + ".jar");
+            if (File.Exists(old)) return old;
+        }
+        return path;
     }
 
     /// <summary>
