@@ -95,7 +95,9 @@ public sealed class GameSession
 public static class GameLauncher
 {
     public const string LauncherName = "ClaudeCL";
-    public const string LauncherVersion = "1.0.5";
+    /// <summary>启动器版本号：从程序集读取（来自项目文件里的 Version），发版时只需改项目文件一处</summary>
+    public static readonly string LauncherVersion =
+        typeof(GameLauncher).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{Math.Max(v.Build, 0)}" : "0.0.0";
 
     public static GameSession? Running { get; private set; }
 
