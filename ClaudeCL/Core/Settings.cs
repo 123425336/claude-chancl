@@ -39,6 +39,9 @@ public sealed class LauncherSettings
     /// <summary>启动游戏前先清理一次内存（需要管理员授权）</summary>
     public bool CleanMemoryBeforeLaunch { get; set; }
 
+    /// <summary>把短时间内大量重复的游戏日志折叠成一条</summary>
+    public bool FoldRepeatedLogs { get; set; } = true;
+
     public DownloadSource Source { get; set; } = DownloadSource.Auto;
     public int DownloadThreads { get; set; } = 48;
 

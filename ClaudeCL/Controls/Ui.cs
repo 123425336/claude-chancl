@@ -33,6 +33,28 @@ public static class Ui
     public static string GetPlaceholder(DependencyObject o) => (string)o.GetValue(PlaceholderProperty);
     public static void SetPlaceholder(DependencyObject o, string v) => o.SetValue(PlaceholderProperty, v);
 
+    /// <summary>输入框右侧显示一个小 x，点一下清空全部内容</summary>
+    public static readonly DependencyProperty ClearableProperty = DependencyProperty.RegisterAttached(
+        "Clearable", typeof(bool), typeof(Ui), new FrameworkPropertyMetadata(false, OnClearableChanged));
+    public static bool GetClearable(DependencyObject o) => (bool)o.GetValue(ClearableProperty);
+    public static void SetClearable(DependencyObject o, bool v) => o.SetValue(ClearableProperty, v);
+
+    private static void OnClearableChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not System.Windows.Controls.TextBox tb) return;
+        // 模板里清空按钮的点击会冒泡到输入框，这里统一处理
+        tb.RemoveHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, (RoutedEventHandler)OnClearClick);
+        if ((bool)e.NewValue) tb.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, (RoutedEventHandler)OnClearClick);
+    }
+
+    private static void OnClearClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox tb || e.OriginalSource is not FrameworkElement { Name: "PART_Clear" }) return;
+        tb.Clear();
+        tb.Focus();
+        e.Handled = true;
+    }
+
     /// <summary>按钮/导航项左侧的图标字形</summary>
     public static readonly DependencyProperty IconProperty = DependencyProperty.RegisterAttached(
         "Icon", typeof(string), typeof(Ui), new FrameworkPropertyMetadata(""));

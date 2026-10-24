@@ -120,6 +120,8 @@ public partial class MainWindow : Window
         if (AppState.SelectedVersion is { } first)
         {
             ShowVersionDetail(first);
+            // 输入一点搜索词，确认清空按钮的样子
+            if (PageHost.Content is VersionDetailPage searching) searching.SearchBox.Text = "fo";
             await Task.Delay(1500);
             Save(System.IO.Path.Combine(dir, "light-detail-mods.png"));
             if (PageHost.Content is VersionDetailPage detail)

@@ -253,10 +253,23 @@
                         <TextBlock x:Name="Ph" Text="{TemplateBinding c:Ui.Placeholder}" Margin="{TemplateBinding Padding}"
                                    Padding="2,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
                                    Foreground="{DynamicResource TextFaintBrush}" Visibility="Collapsed"/>
+                        <!-- 一键清空：开启 Ui.Clearable 且有内容时出现 -->
+                        <Button x:Name="PART_Clear" Style="{StaticResource Btn.Icon}" Width="24" Height="24" c:Ui.CornerRadius="12"
+                                c:Ui.Icon="&#xE711;" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,7,0"
+                                Focusable="False" IsTabStop="False" ToolTip="清空" Visibility="Collapsed"/>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="c:Ui.Clearable" Value="True">
+                            <Setter TargetName="PART_Clear" Property="Visibility" Value="Visible"/>
+                            <!-- 给清空按钮留出位置，文字不会被挡住 -->
+                            <Setter TargetName="PART_ContentHost" Property="Margin" Value="0,0,28,0"/>
+                        </Trigger>
                         <Trigger Property="Text" Value="">
                             <Setter TargetName="Ph" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="PART_Clear" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="IsReadOnly" Value="True">
+                            <Setter TargetName="PART_Clear" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>

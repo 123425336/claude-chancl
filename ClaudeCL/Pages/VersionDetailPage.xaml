@@ -41,7 +41,7 @@
                     <Button Content="添加模组" c:Ui.Icon="&#xE710;" Padding="12,7" Margin="6,0,0,0" Click="AddMods_Click"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBox x:Name="SearchBox" Width="220" c:Ui.Placeholder="搜索模组" TextChanged="Filter_Changed" Margin="0,0,12,0"/>
+                    <TextBox x:Name="SearchBox" Width="220" c:Ui.Placeholder="搜索模组" c:Ui.Clearable="True" TextChanged="Filter_Changed" Margin="0,0,12,0"/>
                     <RadioButton x:Name="AllChip" Style="{StaticResource Chip}" Content="全部" GroupName="ModFilter" IsChecked="True" Checked="Filter_Changed"/>
                     <RadioButton x:Name="OnChip" Style="{StaticResource Chip}" Content="已启用" GroupName="ModFilter" Checked="Filter_Changed"/>
                     <RadioButton x:Name="OffChip" Style="{StaticResource Chip}" Content="已停用" GroupName="ModFilter" Checked="Filter_Changed"/>

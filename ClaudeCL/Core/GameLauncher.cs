@@ -30,16 +30,60 @@ public sealed class GameSession
     /// <summary>游戏退出（参数为退出码）</summary>
     public event Action<int>? Exited;
 
+    // 日志折叠：标准输出与错误输出来自两个线程，共用一把锁
+    private readonly LogFolder? _folder = Settings.Current.FoldRepeatedLogs ? new LogFolder() : null;
+    private readonly object _foldLock = new();
+    private System.Threading.Timer? _foldTimer;
+
     internal void Push(string line)
     {
         // 游戏输出里可能带有令牌（例如旧版本会打印会话信息），先遮盖再保存和显示
         line = Redactor.Clean(line);
+        if (_folder is null)
+        {
+            Emit(line);
+            return;
+        }
+        List<string> output;
+        lock (_foldLock)
+        {
+            output = _folder.Feed(line, DateTime.UtcNow);
+            // 第一次收到输出时启动定时器，用来补发折叠提示
+            _foldTimer ??= new System.Threading.Timer(_ => Tick(), null, 1000, 1000);
+        }
+        foreach (var l in output) Emit(l);
+    }
+
+    private void Tick()
+    {
+        List<string> output;
+        lock (_foldLock) output = _folder!.Tick(DateTime.UtcNow);
+        foreach (var l in output) Emit(l);
+    }
+
+    private void Emit(string line)
+    {
         Lines.Enqueue(line);
         while (Lines.Count > 600) Lines.TryDequeue(out _);
         Output?.Invoke(line);
     }
 
-    internal void RaiseExited(int code) => Exited?.Invoke(code);
+    internal void RaiseExited(int code)
+    {
+        // 退出前把还没汇报的折叠提示补上
+        if (_folder is not null)
+        {
+            List<string> output;
+            lock (_foldLock)
+            {
+                _foldTimer?.Dispose();
+                _foldTimer = null;
+                output = _folder.FlushAll();
+            }
+            foreach (var l in output) Emit(l);
+        }
+        Exited?.Invoke(code);
+    }
 
     /// <summary>运行时间很短就非正常退出，大概率是崩溃了</summary>
     public bool LooksCrashed(int code) => code != 0 && Process.ExitTime - StartedAt < TimeSpan.FromMinutes(30);

@@ -36,6 +36,7 @@ public partial class SettingsPage : UserControl, IPage
         FullscreenCheck.IsChecked = s.Fullscreen;
         IsolateCheck.IsChecked = s.IsolateVersions;
         CleanMemCheck.IsChecked = s.CleanMemoryBeforeLaunch;
+        FoldLogCheck.IsChecked = s.FoldRepeatedLogs;
         AfterBox.SelectedIndex = Math.Clamp(s.AfterLaunch, 0, 2);
         JvmBox.Text = s.ExtraJvmArgs;
         GameArgsBox.Text = s.ExtraGameArgs;
@@ -142,6 +143,7 @@ public partial class SettingsPage : UserControl, IPage
         s.Fullscreen = FullscreenCheck.IsChecked == true;
         s.IsolateVersions = IsolateCheck.IsChecked == true;
         s.CleanMemoryBeforeLaunch = CleanMemCheck.IsChecked == true;
+        s.FoldRepeatedLogs = FoldLogCheck.IsChecked == true;
         s.AfterLaunch = Math.Max(0, AfterBox.SelectedIndex);
         s.ExtraJvmArgs = JvmBox.Text.Trim();
         s.ExtraGameArgs = GameArgsBox.Text.Trim();

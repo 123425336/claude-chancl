@@ -48,7 +48,7 @@
                     <TextBlock Text="看看服务器开着没有、有多少人在线。" Style="{StaticResource T.Caption}" Margin="0,3,0,14"/>
                     <DockPanel>
                         <Button DockPanel.Dock="Right" x:Name="PingButton" Content="查询" Style="{StaticResource Btn.Primary}" Padding="20,8" Margin="10,0,0,0" Click="Ping_Click"/>
-                        <TextBox x:Name="AddressBox" c:Ui.Placeholder="服务器地址，例如 play.example.com:25565" KeyDown="AddressBox_KeyDown"/>
+                        <TextBox x:Name="AddressBox" c:Ui.Placeholder="服务器地址，例如 play.example.com:25565" c:Ui.Clearable="True" KeyDown="AddressBox_KeyDown"/>
                     </DockPanel>
 
                     <StackPanel x:Name="PingLoading" Orientation="Horizontal" Margin="2,16,0,0" Visibility="Collapsed">

@@ -62,6 +62,43 @@ public partial class App : Application
             Shutdown(0);
             return;
         }
+        if (a.Length >= 2 && a[0] == "--fold-test")
+        {
+            // 调试：模拟几种刷屏日志，检查折叠效果
+            var folder = new LogFolder();
+            var outLines = new System.Collections.Generic.List<string>();
+            var t = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+            void Feed(string line) { outLines.AddRange(folder.Feed(line, t)); t = t.AddMilliseconds(1); }
+            Feed("[12:00:00] [main/INFO]: 正常日志 1");
+            Feed("[12:00:00] [main/INFO]: 正常日志 2");
+            // 场景一：栈溢出，三行堆栈循环 1000 遍
+            Feed("java.lang.StackOverflowError");
+            for (var i = 0; i < 1000; i++)
+            {
+                Feed("\tat com.example.Foo.bar(Foo.java:10)");
+                Feed("\tat com.example.Foo.baz(Foo.java:20)");
+                Feed("\tat com.example.Foo.qux(Foo.java:30)");
+            }
+            Feed("[12:00:01] [main/INFO]: 堆栈结束后的正常日志");
+            // 场景二：某个线程每毫秒写一次同样的内容（时间戳不同）
+            for (var i = 0; i < 500; i++) Feed($"[12:00:{2 + i / 1000:00}.{i % 1000:000}] [Worker-3/WARN]: Tick took too long!");
+            Feed("[12:00:03] [main/INFO]: 刷屏结束");
+            // 场景三：刷屏混在正常日志中间（不连续）
+            for (var i = 0; i < 300; i++)
+            {
+                Feed("[12:00:04] [Netty/ERROR]: Connection reset by peer");
+                Feed($"[12:00:04] [main/INFO]: 加载区块 {i}");
+            }
+            t = t.AddSeconds(2);
+            outLines.AddRange(folder.Tick(t));
+            outLines.AddRange(folder.FlushAll());
+            var report = new System.Collections.Generic.List<string> { $"输入 {1 + 2 + 1 + 3000 + 1 + 500 + 1 + 600} 行，输出 {outLines.Count} 行：", "" };
+            report.AddRange(outLines.Where(l => !l.Contains("加载区块")));
+            report.Add($"（另有 {outLines.Count(l => l.Contains("加载区块"))} 行“加载区块”正常日志全部保留，未列出）");
+            System.IO.File.WriteAllLines(a[1], report, new System.Text.UTF8Encoding(false));
+            Shutdown(0);
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--selftest")
         {
             Settings.ReadOnly = true;

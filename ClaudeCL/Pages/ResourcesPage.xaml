@@ -26,7 +26,8 @@
                 <RadioButton x:Name="PackChip" Style="{StaticResource Chip}" Content="资源包" GroupName="ResType" Checked="Type_Changed"/>
                 <RadioButton x:Name="ShaderChip" Style="{StaticResource Chip}" Content="光影" GroupName="ResType" Checked="Type_Changed"/>
             </StackPanel>
-            <TextBox x:Name="SearchBox" Grid.Column="1" Margin="8,0,10,0" c:Ui.Placeholder="搜索，例如 钠、小地图、JEI……（按回车）" KeyDown="SearchBox_KeyDown"/>
+            <TextBox x:Name="SearchBox" Grid.Column="1" Margin="8,0,10,0" c:Ui.Placeholder="搜索，例如 钠、小地图、JEI……（按回车）" c:Ui.Clearable="True"
+                     KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
             <ComboBox x:Name="TargetBox" Grid.Column="2" SelectionChanged="Target_Changed" ToolTip="安装到哪个版本">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>

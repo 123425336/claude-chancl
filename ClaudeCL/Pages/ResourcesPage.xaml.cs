@@ -61,6 +61,16 @@ public partial class ResourcesPage : UserControl, IPage
         if (e.Key == Key.Enter) _ = SearchAsync(false);
     }
 
+    private string _lastQuery = "";
+
+    /// <summary>
+    /// 清空搜索框后自动回到默认列表
+    /// </summary>
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (IsLoaded && SearchBox.Text.Length == 0 && _lastQuery.Length > 0) _ = SearchAsync(false);
+    }
+
     private void More_Click(object sender, RoutedEventArgs e) => _ = SearchAsync(true);
 
     private async Task SearchAsync(bool more)
@@ -81,6 +91,7 @@ public partial class ResourcesPage : UserControl, IPage
         try
         {
             var target = Target;
+            _lastQuery = SearchBox.Text.Trim();
             var (items, total) = await ModrinthClient.SearchAsync(SearchBox.Text.Trim(), ProjectType,
                 target?.GameVersion, target?.ModLoaderName, _offset, ct);
             if (ct.IsCancellationRequested) return;
