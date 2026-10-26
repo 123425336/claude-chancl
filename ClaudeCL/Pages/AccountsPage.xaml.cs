@@ -56,15 +56,6 @@ public partial class AccountsPage : UserControl, IPage
     private async void Microsoft_Click(object sender, MouseButtonEventArgs e)
     {
         var w = MainWindow.Instance!;
-        if (string.IsNullOrWhiteSpace(Settings.Current.MsClientId))
-        {
-            if (await w.Confirm("还差一步设置",
-                    "微软登录需要一个 Azure 应用的 Client ID（重定向地址填 http://localhost，并开通游戏服务接口权限）。填好之后就能直接用网页登录了。",
-                    "去设置", "取消"))
-                w.Navigate("settings");
-            return;
-        }
-
         using var cts = new CancellationTokenSource();
         // 登录对话框：浏览器里完成授权后自动关闭
         string? loginUrl = null;

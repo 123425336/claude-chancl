@@ -60,7 +60,7 @@ public sealed class LauncherSettings
     public AppTheme Theme { get; set; } = AppTheme.Light;
     public bool ShowMascot { get; set; } = true;
 
-    /// <summary>微软登录使用的 Azure 应用 Client ID（需自行申请）</summary>
+    /// <summary>微软登录使用的 Azure 应用 Client ID；为空时使用内置的</summary>
     public string MsClientId { get; set; } = "";
 
     /// <summary>工具页上次查询的服务器地址</summary>

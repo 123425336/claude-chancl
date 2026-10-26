@@ -132,10 +132,12 @@ public static class AccountService
 
     private const string Scope = "XboxLive.signin offline_access";
 
+    /// <summary>内置的 Azure 应用 Client ID（已通过 Minecraft 接口白名单审核），开箱即可正版登录</summary>
+    public const string BuiltinClientId = "1639956c-505a-4aff-97c9-56a07a6797ba";
+
+    /// <summary>设置里填了自己的 Client ID 就用自己的，否则用内置的</summary>
     private static string ClientId =>
-        string.IsNullOrWhiteSpace(Settings.Current.MsClientId)
-            ? throw new InvalidOperationException("还没有设置微软登录的 Client ID，请先到「设置 → 微软登录」中填写")
-            : Settings.Current.MsClientId.Trim();
+        string.IsNullOrWhiteSpace(Settings.Current.MsClientId) ? BuiltinClientId : Settings.Current.MsClientId.Trim();
 
 
     /// <summary>

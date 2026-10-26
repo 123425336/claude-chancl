@@ -103,8 +103,8 @@
                 <StackPanel>
                     <TextBlock Text="微软登录" Style="{StaticResource T.H2}" Margin="0,0,0,6"/>
                     <TextBlock Style="{StaticResource T.Caption}" TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="填写你在 Azure 门户注册的应用 Client ID：平台选择「移动和桌面应用程序」，重定向 URI 填 http://localhost，并申请游戏服务接口权限。登录时会直接打开微软网页授权。"/>
-                    <TextBox x:Name="ClientIdBox" c:Ui.Placeholder="00000000-0000-0000-0000-000000000000" LostFocus="Any_Changed"/>
+                               Text="已经内置了可用的 Client ID，留空就能直接用微软账号登录。想用自己在 Azure 门户注册的应用时再填：平台选「移动和桌面应用程序」，重定向 URI 填 http://localhost，并通过 Minecraft 接口的白名单审核。"/>
+                    <TextBox x:Name="ClientIdBox" c:Ui.Placeholder="留空使用内置的 Client ID" LostFocus="Any_Changed"/>
                 </StackPanel>
             </Border>
         </StackPanel>
