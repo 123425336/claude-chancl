@@ -313,6 +313,12 @@ public partial class App : Application
                     // 只给镜像地址，确认镜像本身能下载并通过校验
                     await Downloader.RunAsync([new DlItem(target, [Net.Candidates(files[0].Url)[0]], files[0].Sha1, files[0].Size)], null, default);
                     r.Add($"经镜像下载并校验通过：{new System.IO.FileInfo(target).Length} 字节");
+                    // 按哈希识别（前置检查用）与检查更新：拿最老的一个版本的哈希去查
+                    var oldest = files[^1];
+                    var lookup = await ModrinthClient.LookupAsync([files[0].Sha1!, oldest.Sha1!], default);
+                    r.Add($"按哈希识别：{lookup.Count} 个，资源 {string.Join("、", lookup.Values.Select(v => v.ProjectId).Distinct())}");
+                    var check = await ModrinthClient.CheckUpdatesAsync([oldest.Sha1!], "1.20.1", "forge", default);
+                    r.Add($"检查更新：{oldest.VersionName} → {(check.Updates.Values.FirstOrDefault()?.Latest.VersionName ?? "没有新版")}");
                 }
                 catch (Exception ex) { r.Add("失败：" + ex); }
                 System.IO.File.WriteAllLines(a[2], r, new System.Text.UTF8Encoding(false));

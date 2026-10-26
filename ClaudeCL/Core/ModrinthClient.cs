@@ -51,7 +51,7 @@ public static class ModrinthClient
     private const string MirrorApi = Net.ModMirror + "/modrinth/v2";
 
     /// <summary>
-    /// 查询接口（只读）：官方接口失败时改用镜像。按文件哈希识别模组的请求不走这里，只发给官方平台
+    /// 查询接口（只读）：官方接口失败时改用镜像
     /// </summary>
     private static Task<JsonNode> GetApiAsync(string pathAndQuery, CancellationToken ct) =>
         Net.GetJsonWithMirrorAsync(Api + pathAndQuery, MirrorApi + pathAndQuery, ct);
@@ -118,7 +118,7 @@ public static class ModrinthClient
     {
         var result = new Dictionary<string, (string, string[])>(StringComparer.OrdinalIgnoreCase);
         if (sha1s.Count == 0) return result;
-        var json = await PostJsonAsync($"{Api}/version_files", new JsonObject
+        var json = await PostJsonAsync("/version_files", new JsonObject
         {
             ["hashes"] = new JsonArray(sha1s.Select(h => (JsonNode)JsonValue.Create(h)!).ToArray()),
             ["algorithm"] = "sha1",
@@ -149,15 +149,11 @@ public static class ModrinthClient
         }
     }
 
-    private static async Task<JsonNode> PostJsonAsync(string url, JsonObject body, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(30));
-        using var resp = await Net.Client.PostAsync(url,
-            new System.Net.Http.StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json"), cts.Token).ConfigureAwait(false);
-        resp.EnsureSuccessStatusCode();
-        return JsonNode.Parse(await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false)) ?? new JsonObject();
-    }
+    /// <summary>
+    /// 按文件哈希识别模组、检查更新的接口：官方接口失败时同样改用镜像（镜像返回的结果与官方一致）
+    /// </summary>
+    private static Task<JsonNode> PostJsonAsync(string path, JsonObject body, CancellationToken ct) =>
+        Net.PostJsonWithMirrorAsync(Api + path, MirrorApi + path, body, ct);
 
     /// <summary>
     /// 查询单个资源的基本信息（名称、图标、简介）
@@ -182,14 +178,14 @@ public static class ModrinthClient
         var hashes = new JsonArray(sha1s.Select(h => (JsonNode)JsonValue.Create(h)!).ToArray());
 
         // 1. 当前文件对应的是哪个模组的哪个版本
-        var current = (await PostJsonAsync($"{Api}/version_files",
+        var current = (await PostJsonAsync("/version_files",
             new JsonObject { ["hashes"] = hashes.DeepClone(), ["algorithm"] = "sha1" }, ct).ConfigureAwait(false)).AsObject();
         foreach (var (hash, cur) in current)
             if ((string?)cur?["project_id"] is { } pid) known[hash] = pid;
         if (current.Count == 0) return new(known, result);
 
         // 2. 这些模组在当前游戏版本与加载器下的最新版本
-        var latest = (await PostJsonAsync($"{Api}/version_files/update", new JsonObject
+        var latest = (await PostJsonAsync("/version_files/update", new JsonObject
         {
             ["hashes"] = new JsonArray(current.Select(kv => (JsonNode)JsonValue.Create(kv.Key)!).ToArray()),
             ["algorithm"] = "sha1",

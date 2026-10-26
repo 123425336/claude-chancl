@@ -92,7 +92,16 @@ public static class Net
     /// 请求第三方接口：官方地址失败时改用镜像地址。“自动”模式下官方接口失败过两次后，之后都先走镜像；
     /// “镜像优先”模式直接先走镜像。找不到（404）属于正常结果，不会再去镜像重试
     /// </summary>
-    public static async Task<JsonNode> GetJsonWithMirrorAsync(string officialUrl, string mirrorUrl, CancellationToken ct = default)
+    public static Task<JsonNode> GetJsonWithMirrorAsync(string officialUrl, string mirrorUrl, CancellationToken ct = default) =>
+        SendWithMirrorAsync(officialUrl, mirrorUrl, null, ct);
+
+    /// <summary>
+    /// 提交 JSON 的接口（例如按文件哈希批量识别模组），镜像规则同上
+    /// </summary>
+    public static Task<JsonNode> PostJsonWithMirrorAsync(string officialUrl, string mirrorUrl, JsonNode body, CancellationToken ct = default) =>
+        SendWithMirrorAsync(officialUrl, mirrorUrl, body.ToJsonString(), ct);
+
+    private static async Task<JsonNode> SendWithMirrorAsync(string officialUrl, string mirrorUrl, string? postBody, CancellationToken ct)
     {
         var mirrorFirst = Settings.Current.Source == DownloadSource.Mirror ||
                           Settings.Current.Source == DownloadSource.Auto && _apiFailures >= 2;
@@ -105,7 +114,14 @@ public static class Net
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 // 第一个地址等得短一点，连不上就尽快换另一个
                 cts.CancelAfter(TimeSpan.FromSeconds(url == urls[0] ? 15 : 30));
-                var text = await Client.GetStringAsync(url, cts.Token).ConfigureAwait(false);
+                string text;
+                if (postBody is null) text = await Client.GetStringAsync(url, cts.Token).ConfigureAwait(false);
+                else
+                {
+                    using var resp = await Client.PostAsync(url, new StringContent(postBody, System.Text.Encoding.UTF8, "application/json"), cts.Token).ConfigureAwait(false);
+                    resp.EnsureSuccessStatusCode();
+                    text = await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+                }
                 return JsonNode.Parse(text) ?? throw new InvalidOperationException("返回内容为空");
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound && url == officialUrl)
