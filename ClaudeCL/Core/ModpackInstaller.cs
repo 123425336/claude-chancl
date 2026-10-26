@@ -253,7 +253,7 @@ public static class ModpackInstaller
         var items = new List<DlItem>();
         foreach (var f in pack.Files)
         {
-            if (SafeCombine(runDir, f.Path) is { } target) items.Add(new DlItem(target, f.Urls, f.Sha1, f.Size));
+            if (SafeCombine(runDir, f.Path) is { } target) items.Add(new DlItem(target, Net.Expand(f.Urls), f.Sha1, f.Size));
             else Log.Warn($"整合包里的文件路径不安全，已跳过：{f.Path}");
         }
         var staging = Path.Combine(runDir, ".claudecl-pack");
@@ -385,7 +385,9 @@ public static class ModpackInstaller
                 {
                     try
                     {
-                        data = (await Net.GetJsonDirectAsync($"{CurseSite}/{f.Project}/files/{f.File}", ct))["data"];
+                        // 先查网页接口，失败时改用镜像的接口（返回格式相同）
+                        data = (await Net.GetJsonWithMirrorAsync($"{CurseSite}/{f.Project}/files/{f.File}",
+                            $"{Net.ModMirror}/curseforge/v1/mods/{f.Project}/files/{f.File}", ct))["data"];
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                     {
@@ -407,7 +409,7 @@ public static class ModpackInstaller
                 }
                 // 文件服务器地址可以由文件编号直接拼出；网页下载地址作为备用
                 var cdn = $"https://edge.forgecdn.net/files/{f.File / 1000}/{f.File % 1000}/{Uri.EscapeDataString(fileName)}";
-                items.Add(new DlItem(target, [cdn, $"{CurseSite}/{f.Project}/files/{f.File}/download"], null, (long?)data["fileLength"] ?? -1));
+                items.Add(new DlItem(target, Net.Expand([cdn, $"{CurseSite}/{f.Project}/files/{f.File}/download"]), null, (long?)data["fileLength"] ?? -1));
             }
             finally
             {

@@ -48,6 +48,13 @@ public sealed record ModCheckResult(Dictionary<string, string> ProjectIds, Dicti
 public static class ModrinthClient
 {
     private const string Api = "https://api.modrinth.com/v2";
+    private const string MirrorApi = Net.ModMirror + "/modrinth/v2";
+
+    /// <summary>
+    /// 查询接口（只读）：官方接口失败时改用镜像。按文件哈希识别模组的请求不走这里，只发给官方平台
+    /// </summary>
+    private static Task<JsonNode> GetApiAsync(string pathAndQuery, CancellationToken ct) =>
+        Net.GetJsonWithMirrorAsync(Api + pathAndQuery, MirrorApi + pathAndQuery, ct);
 
     public static async Task<(List<ResourceProject> Items, int Total)> SearchAsync(
         string query, string projectType, string? gameVersion, string? loader, int offset, CancellationToken ct)
@@ -55,9 +62,9 @@ public static class ModrinthClient
         var facets = new List<string> { $"[\"project_type:{projectType}\"]" };
         if (!string.IsNullOrEmpty(gameVersion)) facets.Add($"[\"versions:{gameVersion}\"]");
         if (!string.IsNullOrEmpty(loader) && projectType == "mod") facets.Add($"[\"categories:{loader}\"]");
-        var url = $"{Api}/search?limit=20&offset={offset}&index=relevance" +
+        var url = $"/search?limit=20&offset={offset}&index=relevance" +
                   $"&query={Uri.EscapeDataString(query)}&facets={Uri.EscapeDataString("[" + string.Join(",", facets) + "]")}";
-        var json = await Net.GetJsonDirectAsync(url, ct).ConfigureAwait(false);
+        var json = await GetApiAsync(url, ct).ConfigureAwait(false);
         var items = json["hits"]!.AsArray().Select(h => new ResourceProject(
             (string)h!["project_id"]!, (string?)h["slug"] ?? "", (string?)h["title"] ?? "", (string?)h["description"] ?? "",
             (string?)h["author"] ?? "", (string?)h["icon_url"], (long?)h["downloads"] ?? 0,
@@ -68,16 +75,17 @@ public static class ModrinthClient
 
     public static async Task<List<ResourceFile>> GetFilesAsync(string projectId, string? gameVersion, string? loader, CancellationToken ct)
     {
-        var url = $"{Api}/project/{projectId}/version";
+        var url = $"/project/{projectId}/version";
         var query = new List<string>();
         if (!string.IsNullOrEmpty(gameVersion)) query.Add("game_versions=" + Uri.EscapeDataString($"[\"{gameVersion}\"]"));
         if (!string.IsNullOrEmpty(loader)) query.Add("loaders=" + Uri.EscapeDataString($"[\"{loader}\"]"));
         if (query.Count > 0) url += "?" + string.Join("&", query);
-        var json = await Net.GetJsonDirectAsync(url, ct).ConfigureAwait(false);
+        var json = await GetApiAsync(url, ct).ConfigureAwait(false);
         var result = new List<ResourceFile>();
         foreach (var v in json.AsArray())
             if (ParseVersion(v) is { } file) result.Add(file);
-        return result;
+        // 镜像返回的顺序和官方不同，统一按发布时间从新到旧排列
+        return result.OrderByDescending(f => f.Published).ToList();
     }
 
     /// <summary>
@@ -156,7 +164,7 @@ public static class ModrinthClient
     /// </summary>
     public static async Task<ResourceProject> GetProjectAsync(string projectId, CancellationToken ct)
     {
-        var p = await Net.GetJsonDirectAsync($"{Api}/project/{projectId}", ct).ConfigureAwait(false);
+        var p = await GetApiAsync($"/project/{projectId}", ct).ConfigureAwait(false);
         return new ResourceProject((string)p["id"]!, (string?)p["slug"] ?? "", (string?)p["title"] ?? "", (string?)p["description"] ?? "",
             "", (string?)p["icon_url"], (long?)p["downloads"] ?? 0, [], (string?)p["project_type"] ?? "mod");
     }
@@ -217,7 +225,7 @@ public static class ModrinthClient
             _ => "mods",
         };
         var target = Path.Combine(runDir, folder, file.FileName);
-        await Downloader.RunAsync([new DlItem(target, [file.Url], file.Sha1, file.Size)], null, ct).ConfigureAwait(false);
+        await Downloader.RunAsync([new DlItem(target, Net.Candidates(file.Url), file.Sha1, file.Size)], null, ct).ConfigureAwait(false);
         return target;
     }
 }

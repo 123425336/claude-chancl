@@ -32,19 +32,26 @@ public static class Net
         return client;
     }
 
-    // 官方地址前缀 → 国内镜像地址前缀
-    private static readonly (string Official, string Mirror)[] MirrorRules =
+    /// <summary>国内的公共模组镜像（MCIM），同步了两个模组平台的接口与文件</summary>
+    public const string ModMirror = "https://mod.mcimirror.top";
+
+    // 官方地址前缀 → 国内镜像地址前缀；OfficialFirst 表示“自动”模式下先试官方地址（官方通常可用，镜像作为后备）
+    private static readonly (string Official, string Mirror, bool OfficialFirst)[] MirrorRules =
     [
-        ("https://piston-meta.mojang.com", "https://bmclapi2.bangbang93.com"),
-        ("https://launchermeta.mojang.com", "https://bmclapi2.bangbang93.com"),
-        ("https://piston-data.mojang.com", "https://bmclapi2.bangbang93.com"),
-        ("https://launcher.mojang.com", "https://bmclapi2.bangbang93.com"),
-        ("https://resources.download.minecraft.net", "https://bmclapi2.bangbang93.com/assets"),
-        ("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
-        ("https://meta.fabricmc.net", "https://bmclapi2.bangbang93.com/fabric-meta"),
-        ("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven"),
-        ("https://maven.minecraftforge.net", "https://bmclapi2.bangbang93.com/maven"),
-        ("https://maven.neoforged.net/releases", "https://bmclapi2.bangbang93.com/maven"),
+        ("https://piston-meta.mojang.com", "https://bmclapi2.bangbang93.com", false),
+        ("https://launchermeta.mojang.com", "https://bmclapi2.bangbang93.com", false),
+        ("https://piston-data.mojang.com", "https://bmclapi2.bangbang93.com", false),
+        ("https://launcher.mojang.com", "https://bmclapi2.bangbang93.com", false),
+        ("https://resources.download.minecraft.net", "https://bmclapi2.bangbang93.com/assets", false),
+        ("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven", false),
+        ("https://meta.fabricmc.net", "https://bmclapi2.bangbang93.com/fabric-meta", false),
+        ("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven", false),
+        ("https://maven.minecraftforge.net", "https://bmclapi2.bangbang93.com/maven", false),
+        ("https://maven.neoforged.net/releases", "https://bmclapi2.bangbang93.com/maven", false),
+        // 模组文件
+        ("https://cdn.modrinth.com", ModMirror, true),
+        ("https://edge.forgecdn.net", ModMirror, true),
+        ("https://mediafilez.forgecdn.net", ModMirror, true),
     ];
 
     /// <summary>
@@ -53,11 +60,13 @@ public static class Net
     public static IReadOnlyList<string> Candidates(string officialUrl)
     {
         string? mirror = null;
-        foreach (var (o, m) in MirrorRules)
+        var officialFirst = false;
+        foreach (var (o, m, of) in MirrorRules)
         {
             if (officialUrl.StartsWith(o, StringComparison.OrdinalIgnoreCase))
             {
                 mirror = m + officialUrl[o.Length..];
+                officialFirst = of;
                 break;
             }
         }
@@ -66,9 +75,51 @@ public static class Net
         {
             DownloadSource.Official => [officialUrl, mirror],
             DownloadSource.Mirror => [mirror, officialUrl],
-            // 自动：镜像通常在国内更快；如果镜像连续失败，就改为官方优先
-            _ => MirrorUnhealthy ? [officialUrl, mirror] : [mirror, officialUrl],
+            // 自动：游戏文件的镜像通常在国内更快，镜像连续失败时改为官方优先；模组文件先试官方，失败再走镜像
+            _ => officialFirst || MirrorUnhealthy ? [officialUrl, mirror] : [mirror, officialUrl],
         };
+    }
+
+    /// <summary>
+    /// 把一组下载地址各自补上镜像候选（保持原来的先后顺序，去掉重复）
+    /// </summary>
+    public static IReadOnlyList<string> Expand(IEnumerable<string> urls) =>
+        urls.SelectMany(Candidates).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    private static int _apiFailures;
+
+    /// <summary>
+    /// 请求第三方接口：官方地址失败时改用镜像地址。“自动”模式下官方接口失败过两次后，之后都先走镜像；
+    /// “镜像优先”模式直接先走镜像。找不到（404）属于正常结果，不会再去镜像重试
+    /// </summary>
+    public static async Task<JsonNode> GetJsonWithMirrorAsync(string officialUrl, string mirrorUrl, CancellationToken ct = default)
+    {
+        var mirrorFirst = Settings.Current.Source == DownloadSource.Mirror ||
+                          Settings.Current.Source == DownloadSource.Auto && _apiFailures >= 2;
+        string[] urls = mirrorFirst ? [mirrorUrl, officialUrl] : [officialUrl, mirrorUrl];
+        Exception? last = null;
+        foreach (var url in urls)
+        {
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                // 第一个地址等得短一点，连不上就尽快换另一个
+                cts.CancelAfter(TimeSpan.FromSeconds(url == urls[0] ? 15 : 30));
+                var text = await Client.GetStringAsync(url, cts.Token).ConfigureAwait(false);
+                return JsonNode.Parse(text) ?? throw new InvalidOperationException("返回内容为空");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound && url == officialUrl)
+            {
+                throw;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                last = ex;
+                if (url == officialUrl && Interlocked.Increment(ref _apiFailures) == 2) Log.Warn("资源平台接口不太稳定，之后先走镜像");
+                Log.Warn($"请求失败（{url}）：{ex.Message}");
+            }
+        }
+        throw last ?? new HttpRequestException("请求失败");
     }
 
     private static int _mirrorFailures;

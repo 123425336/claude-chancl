@@ -289,7 +289,7 @@ public partial class ResourcesPage : UserControl, IPage
                 catch (Exception ex) { Log.Warn("识别已安装模组失败：" + ex.Message); }
             }
 
-            await Downloader.RunAsync([new DlItem(Path.Combine(folder, picked.FileName), [picked.Url], picked.Sha1, picked.Size)], null, CancellationToken.None);
+            await Downloader.RunAsync([new DlItem(Path.Combine(folder, picked.FileName), Net.Candidates(picked.Url), picked.Sha1, picked.Size)], null, CancellationToken.None);
             foreach (var old in oldFiles.Where(f => !string.Equals(Path.GetFileName(f), picked.FileName, StringComparison.OrdinalIgnoreCase)))
             {
                 try { Shell.MoveToRecycleBin(old); }
@@ -306,7 +306,7 @@ public partial class ResourcesPage : UserControl, IPage
                 {
                     try
                     {
-                        await Downloader.RunAsync([new DlItem(Path.Combine(folder, plan.File.FileName), [plan.File.Url], plan.File.Sha1, plan.File.Size)], null, CancellationToken.None);
+                        await Downloader.RunAsync([new DlItem(Path.Combine(folder, plan.File.FileName), Net.Candidates(plan.File.Url), plan.File.Sha1, plan.File.Size)], null, CancellationToken.None);
                         deps++;
                     }
                     catch (Exception ex) { Log.Warn($"前置 {plan.Title} 安装失败：{ex.Message}"); }

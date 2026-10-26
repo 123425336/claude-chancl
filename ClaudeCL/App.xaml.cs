@@ -290,6 +290,36 @@ public partial class App : Application
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             return;
         }
+        if (a.Length >= 3 && a[0] == "--mirror-test")
+        {
+            // 调试：镜像优先模式下走一遍资源平台的查询与下载
+            Settings.ReadOnly = true;
+            Settings.Current.Source = DownloadSource.Mirror;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var r = new System.Collections.Generic.List<string>();
+                try
+                {
+                    var (items, total) = await ModrinthClient.SearchAsync("geckolib", "mod", "1.20.1", "forge", 0, default);
+                    r.Add($"搜索：{total} 个结果，第一个 {items.FirstOrDefault()?.Title}");
+                    var p = await ModrinthClient.FindProjectAsync("geckolib", default);
+                    r.Add($"按短名称查找：{p?.Title}（{p?.Id}）");
+                    r.Add($"查找不存在的资源：{(await ModrinthClient.FindProjectAsync("claudecl-not-exist-xyz", default) is null ? "正确返回空" : "错误")}");
+                    var files = await ModrinthClient.GetFilesAsync(p!.Id, "1.20.1", "forge", default);
+                    r.Add($"版本列表：{files.Count} 个，最新 {files[0].VersionName}");
+                    r.Add("下载候选地址：" + string.Join(" → ", Net.Candidates(files[0].Url)));
+                    var target = System.IO.Path.Combine(a[1], files[0].FileName);
+                    // 只给镜像地址，确认镜像本身能下载并通过校验
+                    await Downloader.RunAsync([new DlItem(target, [Net.Candidates(files[0].Url)[0]], files[0].Sha1, files[0].Size)], null, default);
+                    r.Add($"经镜像下载并校验通过：{new System.IO.FileInfo(target).Length} 字节");
+                }
+                catch (Exception ex) { r.Add("失败：" + ex); }
+                System.IO.File.WriteAllLines(a[2], r, new System.Text.UTF8Encoding(false));
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--pack-test")
         {
             Settings.ReadOnly = true;

@@ -118,7 +118,8 @@ public static class DependencyChecker
         }
         var disabledById = new Dictionary<string, ModEntry>(StringComparer.OrdinalIgnoreCase);
         var disabledByProject = new Dictionary<string, ModEntry>();
-        foreach (var m in mods.Where(m => !m.Enabled))
+        // 同一个前置停用了好几个版本时，优先建议启用版本号最高的
+        foreach (var m in mods.Where(m => !m.Enabled).OrderByDescending(m => ForgeInstaller.SortKey(m.Version), StringComparer.Ordinal))
         {
             // 只按模组自己的 ID 建议启用：前置只是内嵌在别的模组里时，不应该为它启用一整个无关的模组
             foreach (var id in m.OwnIds) disabledById.TryAdd(id, m);
@@ -138,27 +139,74 @@ public static class DependencyChecker
             queue.Enqueue(mod);
         }
 
-        while (queue.Count > 0)
+        // 声明为可选、但代码里离不开的前置（按必需前置处理）
+        var usedOptional = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string By(string dep, ModEntry m) => usedOptional.Contains(dep) ? $"{m.Name}（声明为可选，但代码里用到了）" : m.Name;
+        var packageCache = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // 判断一个可选前置是不是实际离不开：本地有这个前置（停用的也算）时按它的包名精确比对，否则按前置 ID 匹配包路径
+        bool UsesOptional(ModEntry mod, string dep)
         {
-            var mod = queue.Dequeue();
-            // 模组文件里声明的前置
-            foreach (var dep in mod.RequiredIds)
+            try
             {
-                if (provided.Contains(dep)) continue;
-                if (disabledById.TryGetValue(dep, out var d)) Enable(d, mod.Name);
-                else missingIds.TryAdd(dep, mod);
-            }
-            // 平台上登记的前置
-            if (platformDeps.TryGetValue(mod, out var deps))
-            {
-                foreach (var pid in deps)
+                List<string> needles;
+                if (disabledById.TryGetValue(dep, out var local))
                 {
-                    if (enabledProjects.Contains(pid)) continue;
-                    if (disabledByProject.TryGetValue(pid, out var d)) Enable(d, mod.Name);
-                    else missingProjects.TryAdd(pid, mod.Name);
+                    if (!packageCache.TryGetValue(local.Path, out var packages))
+                        packageCache[local.Path] = packages = CodeUsage.MainPackages(local.Path);
+                    var own = CodeUsage.MainPackages(mod.Path);
+                    needles = packages.Where(p => !own.Contains(p)).ToList();
                 }
+                else
+                {
+                    if (dep.Length < 3 || CodeUsage.HasOwnSegment(mod.Path, dep)) return false;
+                    needles = [$"/{dep}/"];
+                }
+                var count = CodeUsage.CountReferences(mod.Path, needles, dep);
+                if (count < CodeUsage.Threshold) return false;
+                Log.Info($"{mod.Name} 把 {dep} 声明为可选前置，但有 {count} 个类用到了它，按必需前置处理");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"检查 {mod.Name} 是否用到 {dep} 失败：{ex.Message}");
+                return false;
             }
         }
+
+        // 要读模组里的类文件，放到后台进行
+        await Task.Run(() =>
+        {
+            while (queue.Count > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                var mod = queue.Dequeue();
+                // 模组文件里声明的前置
+                foreach (var dep in mod.RequiredIds)
+                {
+                    if (provided.Contains(dep)) continue;
+                    if (disabledById.TryGetValue(dep, out var d)) Enable(d, mod.Name);
+                    else missingIds.TryAdd(dep, mod);
+                }
+                foreach (var dep in mod.OptionalIds)
+                {
+                    if (provided.Contains(dep) || Builtins.Contains(dep) || mod.RequiredIds.Contains(dep) || !UsesOptional(mod, dep)) continue;
+                    usedOptional.Add(dep);
+                    if (disabledById.TryGetValue(dep, out var d)) Enable(d, By(dep, mod));
+                    else missingIds.TryAdd(dep, mod);
+                }
+                // 平台上登记的前置
+                if (platformDeps.TryGetValue(mod, out var deps))
+                {
+                    foreach (var pid in deps)
+                    {
+                        if (enabledProjects.Contains(pid)) continue;
+                        if (disabledByProject.TryGetValue(pid, out var d)) Enable(d, mod.Name);
+                        else missingProjects.TryAdd(pid, mod.Name);
+                    }
+                }
+            }
+        }, ct);
         // 后面启用的模组可能顺带满足了前面记下的缺失
         foreach (var id in missingIds.Keys.Where(provided.Contains).ToList()) missingIds.Remove(id);
         foreach (var pid in missingProjects.Keys.Where(enabledProjects.Contains).ToList()) missingProjects.Remove(pid);
@@ -166,7 +214,7 @@ public static class DependencyChecker
 
         if (!online)
         {
-            foreach (var (id, by) in missingIds) report.Unresolved.Add(new MissingDependency(id, by.Name));
+            foreach (var (id, by) in missingIds) report.Unresolved.Add(new MissingDependency(id, By(id, by)));
             return Done(report, version);
         }
 
@@ -190,13 +238,13 @@ public static class DependencyChecker
                 if (project is not null && project.ProjectType == "mod")
                 {
                     if (present.Contains(project.Id) || scheduled.ContainsKey(project.Id)) continue;
-                    if (await ScheduleAsync(project.Id, project.Title, requiredBy.Name, version, loader, present, scheduled, ct)) continue;
+                    if (await ScheduleAsync(project.Id, project.Title, By(depId, requiredBy), version, loader, present, scheduled, ct)) continue;
                 }
                 // 查不到时，如果需要它的模组在平台上登记的前置都已安排好，多半就是其中之一（ID 与短名称不一致）
                 if (platformDeps.TryGetValue(requiredBy, out var reg) && reg.Length > 0 &&
                     reg.All(p => present.Contains(p) || scheduled.ContainsKey(p)))
                     continue;
-                report.Unresolved.Add(new MissingDependency(depId, requiredBy.Name));
+                report.Unresolved.Add(new MissingDependency(depId, By(depId, requiredBy)));
             }
 
             // 要下载的前置自己也有前置，继续递归
@@ -227,7 +275,7 @@ public static class DependencyChecker
         {
             Log.Warn("联网查找前置失败：" + ex.Message);
             report.OnlineError = ex.GetBaseException().Message;
-            foreach (var (id, by) in missingIds) report.Unresolved.Add(new MissingDependency(id, by.Name));
+            foreach (var (id, by) in missingIds) report.Unresolved.Add(new MissingDependency(id, By(id, by)));
         }
         return Done(report, version);
     }
@@ -273,7 +321,7 @@ public static class DependencyChecker
         {
             ct.ThrowIfCancellationRequested();
             progress.Report(new StageProgress($"下载 {plan.Title}", (double)done / total, plan.File.FileName));
-            await Downloader.RunAsync([new DlItem(Path.Combine(modsDir, plan.File.FileName), [plan.File.Url], plan.File.Sha1, plan.File.Size)], null, ct);
+            await Downloader.RunAsync([new DlItem(Path.Combine(modsDir, plan.File.FileName), Net.Candidates(plan.File.Url), plan.File.Sha1, plan.File.Size)], null, ct);
             done++;
         }
         progress.Report(new StageProgress("前置已经准备好", 1));

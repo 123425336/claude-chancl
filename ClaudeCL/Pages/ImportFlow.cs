@@ -387,7 +387,7 @@ public static class ImportFlow
         try
         {
             progress.Report(new StageProgress("下载整合包", 0, picked.FileName));
-            await Downloader.RunAsync([new DlItem(file, [picked.Url], picked.Sha1, picked.Size)], null, cts.Token);
+            await Downloader.RunAsync([new DlItem(file, Net.Candidates(picked.Url), picked.Sha1, picked.Size)], null, cts.Token);
             progress.Close();
         }
         catch (OperationCanceledException)

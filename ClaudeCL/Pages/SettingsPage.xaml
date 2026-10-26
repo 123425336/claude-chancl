@@ -88,6 +88,8 @@
                         <RadioButton x:Name="SrcMirror" Style="{StaticResource Chip}" Content="国内镜像优先" GroupName="Src" Checked="Any_Changed"/>
                         <RadioButton x:Name="SrcOfficial" Style="{StaticResource Chip}" Content="官方源优先" GroupName="Src" Checked="Any_Changed"/>
                     </StackPanel>
+                    <TextBlock Style="{StaticResource T.Caption}" TextWrapping="Wrap" Margin="2,6,0,0"
+                               Text="游戏文件用 BMCLAPI 镜像，模组和整合包用 MCIM 镜像。自动模式下游戏文件先走镜像，模组先走官方，失败时自动换另一边。识别模组用的文件哈希只发给 Modrinth 官方，不经过镜像。"/>
                     <TextBlock Text="同时下载的文件数" Style="{StaticResource T.Label}" Margin="0,18,0,6"/>
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Right" x:Name="ThreadText" Width="60" TextAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>

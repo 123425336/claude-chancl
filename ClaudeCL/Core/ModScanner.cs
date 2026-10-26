@@ -49,6 +49,9 @@ public sealed class ModEntry : INotifyPropertyChanged
     /// <summary>声明为必需的前置模组 ID</summary>
     public HashSet<string> RequiredIds { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>声明为可选的前置模组 ID（有的模组声明成可选，代码里却离不开它）</summary>
+    public HashSet<string> OptionalIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>在资源平台上识别出的资源 ID（未识别为空）</summary>
     public string? ProjectId { get; set; }
 
@@ -158,6 +161,8 @@ public static class ModScanner
         if ((string?)json["id"] is { } ownId) mod.OwnIds.Add(ownId);
         foreach (var p in json["provides"]?.AsArray() ?? []) if ((string?)p is { } pid) mod.OwnIds.Add(pid);
         foreach (var (dep, _) in json["depends"] as JsonObject ?? []) mod.RequiredIds.Add(dep);
+        foreach (var key in new[] { "recommends", "suggests" })
+            foreach (var (dep, _) in json[key] as JsonObject ?? []) mod.OptionalIds.Add(dep);
         mod.Name = (string?)json["name"] ?? (string?)json["id"] ?? "";
         mod.Version = (string?)json["version"] ?? "";
         mod.Description = (string?)json["description"] ?? "";
@@ -183,7 +188,11 @@ public static class ModScanner
         {
             // 依赖可以是字符串，也可以是带 optional 的对象
             if (dep is JsonValue dv && dv.TryGetValue<string>(out var id)) mod.RequiredIds.Add(id);
-            else if (dep is JsonObject dobj && (bool?)dobj["optional"] != true && (string?)dobj["id"] is { } oid) mod.RequiredIds.Add(oid);
+            else if (dep is JsonObject dobj && (string?)dobj["id"] is { } oid)
+            {
+                if ((bool?)dobj["optional"] == true) mod.OptionalIds.Add(oid);
+                else mod.RequiredIds.Add(oid);
+            }
         }
         var meta = loader["metadata"];
         mod.Name = (string?)meta?["name"] ?? (string?)loader["id"] ?? "";
@@ -209,7 +218,11 @@ public static class ModScanner
             // 旧格式用 mandatory=true，新格式用 type="required"；只在服务端需要的不算
             var required = Regex.IsMatch(block, @"(?m)^\s*mandatory\s*=\s*true") ||
                            string.Equals(TomlValue(block, "type"), "required", StringComparison.OrdinalIgnoreCase);
-            if (required && !string.Equals(TomlValue(block, "side"), "SERVER", StringComparison.OrdinalIgnoreCase)) mod.RequiredIds.Add(id);
+            if (string.Equals(TomlValue(block, "side"), "SERVER", StringComparison.OrdinalIgnoreCase)) continue;
+            // 明确写了不兼容的不算可选前置
+            var incompatible = TomlValue(block, "type") is { } t && (t.Equals("incompatible", StringComparison.OrdinalIgnoreCase) || t.Equals("discouraged", StringComparison.OrdinalIgnoreCase));
+            if (required) mod.RequiredIds.Add(id);
+            else if (!incompatible) mod.OptionalIds.Add(id);
         }
         // 只取第一个 [[mods]] 段
         var idx = text.IndexOf("[[mods]]", StringComparison.Ordinal);

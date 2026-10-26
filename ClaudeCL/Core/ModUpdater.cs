@@ -81,7 +81,7 @@ public static class ModUpdater
 
         // 先下载到临时文件，成功后再替换，失败时旧文件不受影响
         var temp = Path.Combine(dir, info.Latest.FileName + ".cldl-new");
-        await Downloader.RunAsync([new DlItem(temp, [info.Latest.Url], info.Latest.Sha1, info.Latest.Size)], null, ct);
+        await Downloader.RunAsync([new DlItem(temp, Net.Candidates(info.Latest.Url), info.Latest.Sha1, info.Latest.Size)], null, ct);
         if (!string.Equals(finalPath, mod.Path, StringComparison.OrdinalIgnoreCase)) Shell.MoveToRecycleBin(mod.Path);
         File.Move(temp, finalPath, true);
         Log.Info($"模组已更新：{Path.GetFileName(mod.Path)} → {Path.GetFileName(finalPath)}");
@@ -102,7 +102,7 @@ public static class ModUpdater
             {
                 var files = await ModrinthClient.GetFilesAsync(dep, version.GameVersion, loader, ct);
                 if (files.FirstOrDefault() is not { } f) continue;
-                await Downloader.RunAsync([new DlItem(Path.Combine(dir, f.FileName), [f.Url], f.Sha1, f.Size)], null, ct);
+                await Downloader.RunAsync([new DlItem(Path.Combine(dir, f.FileName), Net.Candidates(f.Url), f.Sha1, f.Size)], null, ct);
                 deps.Add(f.FileName);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
