@@ -48,6 +48,8 @@ public partial class SettingsPage : UserControl, IPage
         SrcOfficial.IsChecked = s.Source == DownloadSource.Official;
         ThreadSlider.Value = Math.Clamp(s.DownloadThreads, 4, 128);
         ClientIdBox.Text = s.MsClientId;
+        AiBridgeCheck.IsChecked = s.EnableAiBridge;
+        FillMcp();
         FillJava();
         UpdateMemory();
         ThreadText.Text = ((int)ThreadSlider.Value).ToString();
@@ -73,6 +75,42 @@ public partial class SettingsPage : UserControl, IPage
         var idx = string.IsNullOrEmpty(s.JavaPath) ? 0 : _javaPaths.FindIndex(p => string.Equals(p, s.JavaPath, StringComparison.OrdinalIgnoreCase));
         JavaBox.SelectedIndex = Math.Max(0, idx);
     }
+
+    /// <summary>生成注册 MCP 服务用的命令和配置（指向当前这个程序）</summary>
+    private void FillMcp()
+    {
+        var exe = Environment.ProcessPath ?? System.IO.Path.Combine(AppPaths.ExeDir, "ClaudeCL.exe");
+        McpCommandBox.Text = $"claude mcp add claudecl -- \"{exe}\" --mcp";
+        var json = new System.Text.Json.Nodes.JsonObject
+        {
+            ["mcpServers"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["claudecl"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["command"] = exe,
+                    ["args"] = new System.Text.Json.Nodes.JsonArray("--mcp"),
+                },
+            },
+        };
+        McpJsonBox.Text = json.ToJsonString(new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
+    }
+
+    private void CopyText(string text)
+    {
+        try
+        {
+            Clipboard.SetText(text);
+            MainWindow.Instance?.Toast("已复制", ToastKind.Success);
+        }
+        catch { /* 剪贴板被占用时忽略 */ }
+    }
+
+    private void CopyMcpCommand_Click(object sender, RoutedEventArgs e) => CopyText(McpCommandBox.Text);
+    private void CopyMcpJson_Click(object sender, RoutedEventArgs e) => CopyText(McpJsonBox.Text);
 
     private void UpdateMemory()
     {
@@ -156,6 +194,7 @@ public partial class SettingsPage : UserControl, IPage
         s.Source = SrcMirror.IsChecked == true ? DownloadSource.Mirror : SrcOfficial.IsChecked == true ? DownloadSource.Official : DownloadSource.Auto;
         s.DownloadThreads = (int)ThreadSlider.Value;
         s.MsClientId = ClientIdBox.Text.Trim();
+        s.EnableAiBridge = AiBridgeCheck.IsChecked == true;
         Settings.Save();
         UpdateMemory();
     }

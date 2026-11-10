@@ -137,6 +137,8 @@ public static class GameLauncher
         await Task.Run(() => ExtractNatives(gameDir, json, nativesDir), ct);
         var runDir = version.RunDir(gameDir);
         Directory.CreateDirectory(runDir);
+        // 按设置装上或移除游戏内桥接（AI 助手操控游戏用）
+        await Task.Run(() => GameBridge.Prepare(version, runDir), ct);
         progress.Report(new("整理资源文件", 0.9));
         var gameAssets = await Task.Run(() => PrepareLegacyAssets(gameDir, json, runDir), ct);
 

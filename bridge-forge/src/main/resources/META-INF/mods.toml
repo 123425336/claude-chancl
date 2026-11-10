@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="claudecl_bridge"
+version="${version}"
+displayName="ClaudeCL Bridge"
+description='''
+ClaudeCL 启动器的游戏内桥接：让本机的 AI 助手通过启动器读取游戏信息、执行指令和操作角色。
+只监听本机回环地址，并且需要启动器生成的口令才能连接。
+'''
+# 只在客户端运行，不要求服务器安装
+displayTest="IGNORE_ALL_VERSION"
+
+[[dependencies.claudecl_bridge]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.claudecl_bridge]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="CLIENT"

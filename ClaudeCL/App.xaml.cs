@@ -34,6 +34,18 @@ public partial class App : Application
 
         Settings.Load();
 
+        // MCP 服务模式：不显示窗口，通过标准输入输出为 AI 助手提供操控游戏的工具
+        if (e.Args.Contains("--mcp"))
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(() => McpServer.RunAsync(e.Args)).ContinueWith(t =>
+            {
+                if (t.IsFaulted) Log.Error(t.Exception!, "MCP 服务异常退出");
+                Dispatcher.Invoke(() => Shutdown(0));
+            });
+            return;
+        }
+
         // 自动更新后的第一次启动：记下新版本号，稍后提示；顺便清理旧版本留下的文件
         var updated = Array.IndexOf(e.Args, "--updated");
         if (updated >= 0 && updated + 1 < e.Args.Length) UpdatedTo = e.Args[updated + 1];

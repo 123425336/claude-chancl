@@ -63,6 +63,9 @@ public sealed class LauncherSettings
     /// <summary>微软登录使用的 Azure 应用 Client ID；为空时使用内置的</summary>
     public string MsClientId { get; set; } = "";
 
+    /// <summary>启动支持的版本时装上游戏内桥接，允许本机的 AI 助手（通过 MCP）操控游戏</summary>
+    public bool EnableAiBridge { get; set; }
+
     /// <summary>工具页上次查询的服务器地址</summary>
     public string LastServer { get; set; } = "";
 }

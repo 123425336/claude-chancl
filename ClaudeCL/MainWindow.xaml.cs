@@ -97,10 +97,34 @@ public partial class MainWindow : Window
         if (di >= 0 && di + 2 < args.Length) await DropShotAsync(args[di + 1], args[(di + 2)..].TakeWhile(x => !x.StartsWith("--")).ToArray());
         var mi = Array.IndexOf(args, "--modpack-shot");
         if (mi >= 0 && mi + 1 < args.Length) await ModpackShotAsync(args[mi + 1]);
+        var si = Array.IndexOf(args, "--settings-shot");
+        if (si >= 0 && si + 1 < args.Length) await SettingsShotAsync(args[si + 1]);
 #endif
     }
 
 #if DEBUG
+    /// <summary>
+    /// 调试用：截下设置页里的 AI 助手（MCP）卡片，浅色和深色各一张
+    /// </summary>
+    private async Task SettingsShotAsync(string path)
+    {
+        await Task.Delay(800);
+        foreach (var dark in new[] { false, true })
+        {
+            App.ApplyTheme(dark ? AppTheme.Dark : AppTheme.Light);
+            UpdateThemeIcon();
+            Navigate("settings");
+            var page = GetPage<SettingsPage>("settings")!;
+            page.OnShown();
+            await Task.Delay(900);
+            page.McpCommandBox.BringIntoView();
+            await Task.Delay(900);
+            Save(System.IO.Path.ChangeExtension(path, null) + (dark ? "-dark.png" : "-light.png"));
+        }
+        App.ApplyTheme(Settings.Current.Theme);
+        Close();
+    }
+
     /// <summary>
     /// 调试用：截下资源中心的整合包列表和整合包版本选择窗口
     /// </summary>

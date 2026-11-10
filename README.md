@@ -31,6 +31,7 @@ ClaudeCL 使用微软官方的 OAuth 2.0 授权码流程（带 PKCE）登录：�
 - **拖入安装**：把模组、资源包、光影或整合包文件直接拖进窗口就能安装，会自动识别类型，提醒装错加载器的模组
 - **版本管理**：启动、设为当前、检查补全文件、移到回收站、更换游戏目录；点进版本可管理模组（读取名称/版本/图标，搜索、启用/停用、删除；自动检测模组新版，可单个或一键全部更新），也能切换加载器或其版本（如更换 Forge 版本）；文件夹名与版本文件名不一致也能识别
 - **账号**：离线账号；微软账号网页授权登录（已内置 Client ID，开箱即用；也可在设置中换成自己的 Azure 应用）
+- **AI 助手操控游戏（MCP）**：运行 `ClaudeCL.exe --mcp` 即可作为 MCP 服务接入 Claude Code 等 AI 助手（设置页里有现成的注册命令）。助手可以列出版本、启动游戏、新建或进入存档、执行指令并拿到输出、查看玩家/背包/物品/世界/方块信息、截图，以及转视角、左键攻击或挖掘、右键使用物品、移动、整理背包、点击界面按钮。目前支持 Forge 1.20.1；游戏里的桥接模组只监听本机回环地址，并且需要启动器生成的随机口令
 - **小工具**：一键内存清理（管理员权限，释放各程序闲置内存与系统缓存，不结束任何程序）、查找并结束未响应程序、服务器状态查询、本机 Java 列表、常用文件夹
 - **操作**：页面可直接按住拖动滚动（带惯性），滚轮平滑滚动
 - **隐私**：检查模组更新和前置时会把模组文件的 SHA1 哈希发给 Modrinth 用于识别（不发送文件内容；官方连不上时改发给 MCIM 镜像，选「国内镜像优先」时先发给镜像），可在设置中关闭「联网识别模组」；安装 CurseForge 整合包时会向 CurseForge 查询包里写的文件编号以获得下载地址
@@ -52,6 +53,8 @@ ClaudeCL/            启动器本体（界面与启动流程，独立编写）
   Pages/             各个页面
   Themes/            配色与控件样式
   Assets/            看板娘立绘、图标、背景（由 GPT 酱绘制）
+  Bridge/            编译好的游戏内桥接模组（嵌入启动器）
+bridge-forge/        游戏内桥接模组源码（Forge 1.20.1，用 gradlew build 编译）
 PCL.Core/            复用的 Apache-2.0 启动器核心库（未修改）
 PCL.Core.SourceGenerators/
 ```
@@ -65,6 +68,12 @@ dotnet build ClaudeCL/ClaudeCL.csproj -c Release -p:Platform=x64
 ```
 
 输出位于 `ClaudeCL/bin/x64/Release/net10.0-windows/ClaudeCL.exe`。
+
+修改游戏内桥接模组后需要重新编译（JDK 17），再把 `bridge-forge/build/libs/claudecl-bridge-*.jar` 复制为 `ClaudeCL/Bridge/claudecl-bridge.jar`：
+
+```bash
+cd bridge-forge && ./gradlew build
+```
 
 ## 许可
 
