@@ -80,7 +80,8 @@ public partial class SettingsPage : UserControl, IPage
     private void FillMcp()
     {
         var exe = Environment.ProcessPath ?? System.IO.Path.Combine(AppPaths.ExeDir, "ClaudeCL.exe");
-        McpCommandBox.Text = $"claude mcp add claudecl -- \"{exe}\" --mcp";
+        // -s user：注册到全局，所有项目都能用；'--' 加引号，避免被 PowerShell 当成它自己的参数结束符吞掉
+        McpCommandBox.Text = $"claude mcp add -s user claudecl '--' \"{exe}\" --mcp";
         var json = new System.Text.Json.Nodes.JsonObject
         {
             ["mcpServers"] = new System.Text.Json.Nodes.JsonObject

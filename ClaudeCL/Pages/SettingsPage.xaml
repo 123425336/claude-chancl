@@ -115,11 +115,14 @@
                     <TextBlock Style="{StaticResource T.Caption}" TextWrapping="Wrap" Margin="0,0,0,12"
                                Text="把 ClaudeCL 注册成 AI 助手的 MCP 工具后，助手可以启动游戏、进入存档、执行指令、查看物品和世界信息、用左右键操作角色。目前支持 Forge 1.20.1 版本。游戏里会装一个只监听本机、需要口令才能连接的桥接模组。"/>
                     <CheckBox x:Name="AiBridgeCheck" Content="从启动器启动 Forge 1.20.1 时也装上桥接（关闭时只有 AI 助手启动游戏才会装）" Click="Any_Changed"/>
-                    <TextBlock Text="在 Claude Code 里注册（在终端运行一次）" Style="{StaticResource T.Label}" Margin="0,16,0,6"/>
+                    <TextBlock Text="在 Claude Code 里注册（在终端运行一次，所有项目都能用）" Style="{StaticResource T.Label}" Margin="0,16,0,6"/>
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="复制" Margin="8,0,0,0" Click="CopyMcpCommand_Click"/>
-                        <TextBox x:Name="McpCommandBox" IsReadOnly="True" FontFamily="Consolas"/>
+                        <Button DockPanel.Dock="Right" Content="复制" Margin="8,0,0,0" VerticalAlignment="Top" Click="CopyMcpCommand_Click"/>
+                        <TextBox x:Name="McpCommandBox" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap"/>
                     </DockPanel>
+                    <!-- PowerShell 会吞掉不带引号的两个减号，所以命令里给它加了单引号；cmd 不认单引号 -->
+                    <TextBlock Style="{StaticResource T.Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="这条命令适用于 PowerShell 和 Git Bash；在 cmd 里运行时，把 '--' 的引号去掉。"/>
                     <TextBlock Text="其他支持 MCP 的程序（配置文件写法）" Style="{StaticResource T.Label}" Margin="0,14,0,6"/>
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Content="复制" Margin="8,0,0,0" VerticalAlignment="Top" Click="CopyMcpJson_Click"/>
