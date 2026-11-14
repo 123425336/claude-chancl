@@ -26,7 +26,18 @@ public partial class VersionDetailPage : UserControl, IPage
     {
         _version = version;
         InitializeComponent();
+        // 详情页每次打开都是新实例，显示期间才订阅，避免离开后还被静态事件引用着
+        Loaded += (_, _) => { LaunchFlow.StateChanged += OnLaunchStateChanged; RefreshLogButton(); };
+        Unloaded += (_, _) => LaunchFlow.StateChanged -= OnLaunchStateChanged;
     }
+
+    private void OnLaunchStateChanged() => Dispatcher.BeginInvoke(RefreshLogButton);
+
+    /// <summary>有正在启动或运行的游戏时才显示“查看日志”</summary>
+    private void RefreshLogButton() =>
+        LogButton.Visibility = LaunchFlow.HasLiveLog ? Visibility.Visible : Visibility.Collapsed;
+
+    private void Log_Click(object sender, RoutedEventArgs e) => LaunchFlow.ShowLiveLog();
 
     private string RunDir => _version.RunDir(Settings.Current.GameDir);
 

@@ -14,6 +14,9 @@
             <Button DockPanel.Dock="Left" Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE72B;" ToolTip="返回主页" Click="Back_Click"
                     VerticalAlignment="Center" Margin="0,0,10,0"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- 游戏运行中时显示，收起日志后可以从这里重新打开 -->
+                <Button x:Name="LogButton" Content="查看日志" c:Ui.Icon="&#xE8A5;" Padding="14,7" Margin="0,0,8,0" Visibility="Collapsed"
+                        ToolTip="重新打开正在运行的游戏的实时日志" Click="Log_Click"/>
                 <Button Content="打开文件夹" c:Ui.Icon="&#xE8B7;" Padding="14,7" Margin="0,0,8,0" Click="Folder_Click"/>
                 <Button Content="启动" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE768;" Padding="18,7" Click="Launch_Click"/>
             </StackPanel>

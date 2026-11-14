@@ -23,6 +23,9 @@ public static class LaunchFlow
 
     private static bool _busy;
 
+    /// <summary>当前是否有可以查看的实时日志（正在启动，或游戏还在运行）</summary>
+    public static bool HasLiveLog => _busy || GameLauncher.Running is { } s && !s.Process.HasExited;
+
     public static async Task RunAsync(InstalledVersion? version)
     {
         var w = MainWindow.Instance!;
@@ -62,6 +65,8 @@ public static class LaunchFlow
             return;
 
         _busy = true;
+        // 准备阶段也通知一下，让各页面的“查看日志”入口及时出现
+        StateChanged?.Invoke();
         using var cts = new CancellationTokenSource();
         // 点击启动后立即打开全屏日志，准备过程和游戏输出都显示在里面
         var view = new GameLogView(version, cts);
@@ -115,10 +120,32 @@ public static class LaunchFlow
         {
             GameLauncher.Trace -= OnTrace;
             _busy = false;
+            // 启动失败或取消时入口要跟着隐藏
+            StateChanged?.Invoke();
         }
     }
 
     private static GameLogView? _view;
+
+#if DEBUG
+    /// <summary>调试截图用：假装正在启动，得到一份可以收起再打开的日志</summary>
+    internal static GameLogView DebugBeginFakeLaunch(InstalledVersion version)
+    {
+        var view = new GameLogView(version, new CancellationTokenSource());
+        _view = view;
+        _busy = true;
+        StateChanged?.Invoke();
+        return view;
+    }
+
+    /// <summary>调试截图用：结束假装的启动</summary>
+    internal static void DebugEndFakeLaunch()
+    {
+        _busy = false;
+        _view = null;
+        StateChanged?.Invoke();
+    }
+#endif
 
     // ---------------- 前置检查 ----------------
 
@@ -337,7 +364,7 @@ public static class LaunchFlow
 
 
     /// <summary>
-    /// 打开全屏实时日志（主页“查看日志”按钮）
+    /// 打开全屏实时日志（主页和模组管理页的“查看日志”按钮）
     /// </summary>
     public static void ShowLiveLog()
     {

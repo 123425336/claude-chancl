@@ -99,10 +99,53 @@ public partial class MainWindow : Window
         if (mi >= 0 && mi + 1 < args.Length) await ModpackShotAsync(args[mi + 1]);
         var si = Array.IndexOf(args, "--settings-shot");
         if (si >= 0 && si + 1 < args.Length) await SettingsShotAsync(args[si + 1]);
+        var li = Array.IndexOf(args, "--log-shot");
+        if (li >= 0 && li + 1 < args.Length) await LogShotAsync(args[li + 1]);
 #endif
     }
 
 #if DEBUG
+    /// <summary>
+    /// 调试用：在模组管理页收起日志后，再从页面顶部的“查看日志”重新打开，浅色和深色各截一组
+    /// </summary>
+    private async Task LogShotAsync(string dir)
+    {
+        System.IO.Directory.CreateDirectory(dir);
+        await Task.Delay(800);
+        if (AppState.SelectedVersion is not { } v) { Close(); return; }
+        var log = LaunchFlow.DebugBeginFakeLaunch(v);
+        log.Info($"准备启动 {v.Id}（{v.Summary}）");
+        for (var i = 0; i < 20; i++)
+            log.Append($"[12:00:{i:00}] [Render thread/INFO]: 示例游戏输出第 {i + 1} 行");
+        foreach (var dark in new[] { false, true })
+        {
+            var tag = dark ? "dark" : "light";
+            App.ApplyTheme(dark ? AppTheme.Dark : AppTheme.Light);
+            UpdateThemeIcon();
+            ShowVersionDetail(v);
+            await Task.Delay(1500);
+            // 日志处于收起状态时，顶部应该出现“查看日志”
+            Save(System.IO.Path.Combine(dir, $"{tag}-detail-collapsed.png"));
+            if (PageHost.Content is VersionDetailPage page)
+            {
+                var button = FindChildren<Button>(page).FirstOrDefault(b => b.Name == "LogButton");
+                Log.Info($"截图：查看日志按钮 {(button?.IsVisible == true ? "可见" : "不可见")}");
+                button?.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            }
+            await Task.Delay(900);
+            Log.Info($"截图：日志层 {(OverlayLayer.Children.Contains(log) && OverlayLayer.Visibility == Visibility.Visible ? "已重新打开" : "没有打开")}");
+            Save(System.IO.Path.Combine(dir, $"{tag}-log-reopened.png"));
+            CloseOverlay(log);
+            await Task.Delay(500);
+        }
+        LaunchFlow.DebugEndFakeLaunch();
+        await Task.Delay(300);
+        // 没有游戏运行时按钮应当隐藏
+        Save(System.IO.Path.Combine(dir, "dark-detail-idle.png"));
+        App.ApplyTheme(Settings.Current.Theme);
+        Close();
+    }
+
     /// <summary>
     /// 调试用：截下设置页里的 AI 助手（MCP）卡片，浅色和深色各一张
     /// </summary>
