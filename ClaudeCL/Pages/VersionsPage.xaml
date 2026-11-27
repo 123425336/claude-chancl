@@ -65,7 +65,7 @@
                                                 IsEnabled="{Binding Version.IsValid}"/>
                                         <Button Content="管理" Padding="12,6" Margin="0,0,6,0" c:Ui.Icon="&#xEA86;" ToolTip="管理模组、切换加载器" Tag="{Binding}" Click="Mods_Click"/>
                                         <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE8B7;" ToolTip="打开文件夹" Tag="{Binding}" Click="Folder_Click"/>
-                                        <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE90F;" ToolTip="检查并补全文件" Tag="{Binding}" Click="Repair_Click"/>
+                                        <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE90F;" ToolTip="校验游戏完整性（逐个核对文件，修复缺失和损坏的）" Tag="{Binding}" Click="Repair_Click"/>
                                         <Button Style="{StaticResource Btn.Icon}" c:Ui.Icon="&#xE74D;" ToolTip="删除（移到回收站）" Tag="{Binding}" Click="Delete_Click"
                                                 c:Ui.HoverBackground="{DynamicResource DangerSoftBrush}"/>
                                     </StackPanel>

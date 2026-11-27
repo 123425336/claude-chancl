@@ -39,6 +39,8 @@ public partial class VersionDetailPage : UserControl, IPage
 
     private void Log_Click(object sender, RoutedEventArgs e) => LaunchFlow.ShowLiveLog();
 
+    private async void Verify_Click(object sender, RoutedEventArgs e) => await VerifyFlow.RunAsync(_version);
+
     private string RunDir => _version.RunDir(Settings.Current.GameDir);
 
     /// <summary>当前列出的模组（调试截图用）</summary>

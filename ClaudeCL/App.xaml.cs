@@ -345,6 +345,30 @@ public partial class App : Application
             _ = SelfTest.RunPackAsync(a[1], a[2], a[3], !a.Contains("--no-launch")).ContinueWith(t => Dispatcher.Invoke(() => Shutdown(t.Result)));
             return;
         }
+        if (a.Length >= 4 && a[0] == "--verify-test")
+        {
+            // 调试：校验游戏完整性并把结果写进报告文件（参数：游戏目录 版本 报告文件）
+            Settings.ReadOnly = true;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = Task.Run(async () =>
+            {
+                var lines = new System.Collections.Generic.List<string>();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    // 带 --dry 时只校验不修复，用来检查真实游戏目录会不会误报
+                    var r = a.Contains("--dry")
+                        ? await Downloader.VerifyAsync(await Installer.CollectItemsAsync(a[1], a[2], null, false, default), null, default)
+                        : await Installer.VerifyAndRepairAsync(a[1], a[2], null, default);
+                    lines.Add($"检查 {r.Checked} 个，缺失 {r.Missing.Count}，损坏 {r.Damaged.Count}，无哈希 {r.WithoutHash}，用时 {sw.Elapsed.TotalSeconds:0.0} 秒");
+                    lines.AddRange(r.Missing.Select(i => "缺失：" + i.Path));
+                    lines.AddRange(r.Damaged.Select(i => "损坏：" + i.Path));
+                }
+                catch (Exception ex) { lines.Add("异常：" + ex); }
+                System.IO.File.WriteAllLines(a[3], lines, new System.Text.UTF8Encoding(false));
+            }).ContinueWith(_ => Dispatcher.Invoke(() => Shutdown(0)));
+            return;
+        }
         if (a.Length >= 4 && a[0] == "--selftest")
         {
             Settings.ReadOnly = true;

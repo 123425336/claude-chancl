@@ -15,6 +15,12 @@ public sealed record DlItem(string Path, IReadOnlyList<string> Urls, string? Sha
 /// <summary>下载进度快照</summary>
 public readonly record struct DlProgress(int Done, int Total, long Bytes);
 
+/// <summary>文件校验结果：共检查多少个、缺失的、损坏的（大小或 SHA1 不对）、没有 SHA1 只能按大小判断的个数</summary>
+public sealed record VerifyResult(int Checked, IReadOnlyList<DlItem> Missing, IReadOnlyList<DlItem> Damaged, int WithoutHash)
+{
+    public bool AllGood => Missing.Count == 0 && Damaged.Count == 0;
+}
+
 /// <summary>
 /// 多线程下载器：跳过已完整的文件、多地址轮换重试、下载完成后校验 SHA1
 /// </summary>
@@ -33,13 +39,60 @@ public static class Downloader
         return true;
     }
 
-    public static async Task RunAsync(IEnumerable<DlItem> items, IProgress<DlProgress>? progress, CancellationToken ct)
+    /// <summary>
+    /// 逐个核对本地文件：缺失、大小不对、或 SHA1 与期望不符的都算损坏。
+    /// 没有提供 SHA1 的文件只能按大小判断。返回需要重新下载的文件
+    /// </summary>
+    public static async Task<VerifyResult> VerifyAsync(IEnumerable<DlItem> items, IProgress<DlProgress>? progress, CancellationToken ct)
+    {
+        var list = items.GroupBy(i => i.Path, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+        var missing = new ConcurrentBag<DlItem>();
+        var damaged = new ConcurrentBag<DlItem>();
+        var noHash = 0;
+        var done = 0;
+        long bytes = 0;
+        // 计算哈希主要受磁盘速度限制，线程数不用太多
+        await Parallel.ForEachAsync(list, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 8), CancellationToken = ct },
+            async (item, token) =>
+            {
+                var fi = new FileInfo(item.Path);
+                if (!fi.Exists || fi.Length == 0) missing.Add(item);
+                else if (item.Size > 0 && fi.Length != item.Size) damaged.Add(item);
+                else if (item.Sha1 is not { Length: > 0 }) Interlocked.Increment(ref noHash);
+                else
+                {
+                    try
+                    {
+                        await using var fs = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, true);
+                        var hash = Convert.ToHexStringLower(await SHA1.HashDataAsync(fs, token).ConfigureAwait(false));
+                        if (!hash.Equals(item.Sha1, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Log.Warn($"文件校验不通过：{item.Path}（期望 {item.Sha1}，实际 {hash}）");
+                            damaged.Add(item);
+                        }
+                        Interlocked.Add(ref bytes, fi.Length);
+                    }
+                    catch (IOException ex)
+                    {
+                        // 读不了（例如正被占用）就当作需要重新下载
+                        Log.Warn($"无法读取 {item.Path}：{ex.Message}");
+                        damaged.Add(item);
+                    }
+                }
+                var d = Interlocked.Increment(ref done);
+                if (d % 50 == 0 || d == list.Count) progress?.Report(new DlProgress(d, list.Count, Interlocked.Read(ref bytes)));
+            }).ConfigureAwait(false);
+        return new VerifyResult(list.Count, missing.ToList(), damaged.ToList(), noHash);
+    }
+
+    /// <param name="force">为 true 时不再按大小跳过已有文件（用于重新下载校验不通过的文件）</param>
+    public static async Task RunAsync(IEnumerable<DlItem> items, IProgress<DlProgress>? progress, CancellationToken ct, bool force = false)
     {
         // 同一路径只下载一次
         var list = items
             .GroupBy(i => i.Path, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
-            .Where(i => !IsComplete(i))
+            .Where(i => force || !IsComplete(i))
             .ToList();
         var total = list.Count;
         if (total == 0)

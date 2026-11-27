@@ -17,6 +17,9 @@
                 <!-- 游戏运行中时显示，收起日志后可以从这里重新打开 -->
                 <Button x:Name="LogButton" Content="查看日志" c:Ui.Icon="&#xE8A5;" Padding="14,7" Margin="0,0,8,0" Visibility="Collapsed"
                         ToolTip="重新打开正在运行的游戏的实时日志" Click="Log_Click"/>
+                <!-- 校验游戏完整性：逐个核对文件 SHA1，修复缺失和损坏的 -->
+                <Button Content="校验文件" c:Ui.Icon="&#xE90F;" Padding="14,7" Margin="0,0,8,0"
+                        ToolTip="校验游戏完整性（逐个核对文件，修复缺失和损坏的）" Click="Verify_Click"/>
                 <Button Content="打开文件夹" c:Ui.Icon="&#xE8B7;" Padding="14,7" Margin="0,0,8,0" Click="Folder_Click"/>
                 <Button Content="启动" Style="{StaticResource Btn.Primary}" c:Ui.Icon="&#xE768;" Padding="18,7" Click="Launch_Click"/>
             </StackPanel>

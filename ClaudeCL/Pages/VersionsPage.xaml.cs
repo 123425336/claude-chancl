@@ -73,28 +73,10 @@ public partial class VersionsPage : UserControl, IPage
         if (From(sender) is { } v) Shell.Open(v.RunDir(Settings.Current.GameDir));
     }
 
+    /// <summary>校验游戏完整性：逐个核对 SHA1，缺失或损坏的重新下载</summary>
     private async void Repair_Click(object sender, RoutedEventArgs e)
     {
-        if (From(sender) is not { } v) return;
-        var w = MainWindow.Instance!;
-        using var cts = new CancellationTokenSource();
-        var dialog = ProgressDialog.Show($"正在检查 {v.Id}", cts);
-        try
-        {
-            await Installer.CompleteAsync(Settings.Current.GameDir, v.Id, dialog.Progress, cts.Token);
-            dialog.Close();
-            w.Toast($"{v.Id} 的文件都完好无损", ToastKind.Success);
-        }
-        catch (OperationCanceledException)
-        {
-            dialog.Close();
-        }
-        catch (Exception ex)
-        {
-            dialog.Close();
-            Log.Error(ex, "补全文件失败");
-            await w.Confirm("补全文件没有完成", ex.Message, "知道了", null);
-        }
+        if (From(sender) is { } v) await VerifyFlow.RunAsync(v);
     }
 
     private async void Delete_Click(object sender, RoutedEventArgs e)

@@ -103,6 +103,55 @@ public static class Installer
     /// </summary>
     public static async Task CompleteAsync(string gameDir, string id, IProgress<StageProgress>? progress, CancellationToken ct)
     {
+        var items = await CollectItemsAsync(gameDir, id, progress, false, ct).ConfigureAwait(false);
+
+        // 4. 统一下载
+        await Downloader.RunAsync(items, new Progress<DlProgress>(p =>
+        {
+            if (p.Total == 0) return;
+            progress?.Report(new("下载游戏文件", 0.1 + 0.85 * p.Done / p.Total,
+                $"{p.Done} / {p.Total} · {FormatSize(p.Bytes)}"));
+        }), ct).ConfigureAwait(false);
+
+        progress?.Report(new("文件已就绪", 1.0));
+    }
+
+    /// <summary>
+    /// 校验游戏完整性：逐个核对客户端、库、natives、资源文件的 SHA1，
+    /// 缺失或损坏的重新下载（下载成功后才覆盖旧文件）。返回修复前的校验结果
+    /// </summary>
+    public static async Task<VerifyResult> VerifyAndRepairAsync(string gameDir, string id, IProgress<StageProgress>? progress, CancellationToken ct)
+    {
+        var items = await CollectItemsAsync(gameDir, id, progress, true, ct).ConfigureAwait(false);
+
+        var result = await Downloader.VerifyAsync(items, new Progress<DlProgress>(p =>
+        {
+            if (p.Total == 0) return;
+            progress?.Report(new("校验文件", 0.1 + 0.6 * p.Done / p.Total,
+                $"{p.Done} / {p.Total} · {FormatSize(p.Bytes)}"));
+        }), ct).ConfigureAwait(false);
+
+        var broken = result.Missing.Concat(result.Damaged).ToList();
+        if (broken.Count > 0)
+        {
+            Log.Info($"{id} 校验发现 {result.Missing.Count} 个缺失、{result.Damaged.Count} 个损坏的文件，开始重新下载");
+            await Downloader.RunAsync(broken, new Progress<DlProgress>(p =>
+            {
+                if (p.Total == 0) return;
+                progress?.Report(new("重新下载有问题的文件", 0.7 + 0.28 * p.Done / p.Total,
+                    $"{p.Done} / {p.Total} · {FormatSize(p.Bytes)}"));
+            }), ct, force: true).ConfigureAwait(false);
+        }
+        progress?.Report(new("校验完成", 1.0));
+        return result;
+    }
+
+    /// <summary>
+    /// 列出版本运行需要的全部文件（客户端、库、natives、资源）；
+    /// 资源索引不存在时先下载，<paramref name="verifyIndex"/> 为 true 时还会核对索引本身的 SHA1
+    /// </summary>
+    internal static async Task<List<DlItem>> CollectItemsAsync(string gameDir, string id, IProgress<StageProgress>? progress, bool verifyIndex, CancellationToken ct)
+    {
         var version = VersionStore.Load(gameDir, id);
         if (!version.IsValid) throw new InvalidDataException(version.Error);
         var json = version.Json!;
@@ -126,7 +175,9 @@ public static class Installer
             var indexItem = new DlItem(
                 Path.Combine(gameDir, "assets", "indexes", (string)assetIndex["id"]! + ".json"),
                 Net.Candidates((string)assetIndex["url"]!), (string?)assetIndex["sha1"], (long?)assetIndex["size"] ?? -1);
-            await Downloader.RunAsync([indexItem], null, ct).ConfigureAwait(false);
+            // 索引本身坏了的话，后面列出的资源也不可信，所以先单独核对并修好它
+            var indexBroken = verifyIndex && !(await Downloader.VerifyAsync([indexItem], null, ct).ConfigureAwait(false)).AllGood;
+            await Downloader.RunAsync([indexItem], null, ct, force: indexBroken).ConfigureAwait(false);
             indexJson = JsonNode.Parse(await File.ReadAllTextAsync(indexItem.Path, ct).ConfigureAwait(false))!.AsObject();
             foreach (var (_, obj) in indexJson["objects"]!.AsObject())
             {
@@ -136,16 +187,7 @@ public static class Installer
                     Net.Candidates($"{AssetsBase}/{sub}/{hash}"), hash, (long?)obj["size"] ?? -1));
             }
         }
-
-        // 4. 统一下载
-        await Downloader.RunAsync(items, new Progress<DlProgress>(p =>
-        {
-            if (p.Total == 0) return;
-            progress?.Report(new("下载游戏文件", 0.1 + 0.85 * p.Done / p.Total,
-                $"{p.Done} / {p.Total} · {FormatSize(p.Bytes)}"));
-        }), ct).ConfigureAwait(false);
-
-        progress?.Report(new("文件已就绪", 1.0));
+        return items;
     }
 
     /// <summary>
